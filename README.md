@@ -16,13 +16,14 @@ content/index.md
   ├───────────────┐
   │               │
   ▼               ▼
-Hono Preview    Static Export
-  │               │
-  ▼               ▼
-Browser       dist/index.html
-                  │
-                  ▼
-             GitHub Pages
+Hono Preview         Static Export
+  │                    │
+  ├ /  組版            ├ dist/index.html
+  └ /web.html Web      ├ dist/web.html
+                       └ dist/assets/*
+                             │
+                             ▼
+                        GitHub Pages
 ```
 
 ## 使い方
@@ -56,14 +57,14 @@ http://127.0.0.1:3000 を開きます。
 
 ## コマンド
 
-| コマンド             | 内容                                           |
-| -------------------- | ---------------------------------------------- |
-| `bun run dev`        | Preview server を起動する                      |
-| `vp check`           | フォーマット・lint（警告もエラー）・型チェック |
-| `vp test`            | parser / renderer / HTTP のテスト              |
-| `vp test --coverage` | 同上。`src/**` のカバレッジ 95% を要求する     |
-| `bun run export`     | `dist/index.html` と CSS を生成する            |
-| `bun audit`          | 依存関係の脆弱性を検査する                     |
+| コマンド             | 内容                                                  |
+| -------------------- | ----------------------------------------------------- |
+| `bun run dev`        | Preview server を起動する                             |
+| `vp check`           | フォーマット・lint（警告もエラー）・型チェック        |
+| `vp test`            | parser / renderer / HTTP のテスト                     |
+| `vp test --coverage` | 同上。`src/**` のカバレッジ 95% を要求する            |
+| `bun run export`     | `dist/index.html` / `dist/web.html` と CSS を生成する |
+| `bun audit`          | 依存関係の脆弱性を検査する                            |
 
 `vp fmt` / `vp lint` で個別にも実行できます。Oxlint は `correctness` と `suspicious` を error、`perf` を warn とし、`denyWarnings` で警告も CI を失敗させます。eval・`javascript:` URL・import cycle などのセキュリティ規則は個別に error です。Oxfmt は `printWidth: 100`、単一引用符、セミコロンなし、import 整列を強制します。
 
@@ -72,8 +73,11 @@ http://127.0.0.1:3000 を開きます。
 | 経路                      | 内容                                        |
 | ------------------------- | ------------------------------------------- |
 | `GET /`                   | `content/index.md` を読み、組版 HTML を返す |
+| `GET /web.html`           | 同じ原稿を Web 記事スタイルで返す           |
+| `GET /web`                | `/web.html` と同じ Web 記事ビュー           |
 | `GET /health`             | `{ "ok": true }`                            |
 | `GET /assets/typeset.css` | 組版 CSS                                    |
+| `GET /assets/web.css`     | Web 記事 CSS                                |
 
 `GET /` は毎回ファイルを読み直し、`Cache-Control: no-store` で返します。v0.1 の live reload はブラウザの手動更新です。
 
@@ -104,7 +108,13 @@ HTML は必ず escape します。リンクは `https:` / `http:` / `mailto:` / 
 
 ## 組版
 
-Preview は A4 横幅の通常横書きです。本文は明朝、見出しはゴシック、code は等幅です。印刷時は `@page { size: A4; }` を使います。
+Preview の既定表示は A4 横幅の通常横書きです。本文は明朝、見出しはゴシック、code は等幅です。印刷時は `@page { size: A4; }` を使います。
+
+## Web 記事
+
+`/web.html` は同じ Markdown を、技術メディアの Web 記事に近い画面組で表示します。本文はゴシック、見出しにアクセント、画面幅に合わせた読み幅です。組版ビューとの切り替えはページ右上（Web ではヘッダー）の「組版 / Web」から行います。JavaScript は使いません。
+
+参考にした画面の骨格は [CodeZine の記事ページ](https://codezine.jp/article/detail/23908) です。ロゴやナビは複製せず、読み幅・ゴシック本文・左アクセントの見出しなど記事本文の組だけを取り入れています。
 
 Web 側に editor textarea はありません。編集は VS Code で行います。
 
@@ -121,8 +131,10 @@ bun run export
 ```
 dist/
 ├─ index.html
+├─ web.html
 └─ assets/
-   └─ typeset.css
+   ├─ typeset.css
+   └─ web.css
 ```
 
 `main` への push で GitHub Actions が `vp install --frozen-lockfile` → `vp test` → `vp run export` → GitHub Pages へ deploy します。リポジトリの Pages 設定は **GitHub Actions** を選んでください。
@@ -141,6 +153,7 @@ import { createPreviewApp } from './src/app.ts'
 
 const fragment = renderMarkdown(markdown)
 const document = renderDocument(fragment)
+const webDocument = renderDocument(fragment, { mode: 'web' })
 const assets = exportSite(markdown)
 const app = createPreviewApp({
   source: './content/index.md',

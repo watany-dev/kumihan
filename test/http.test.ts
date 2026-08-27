@@ -53,7 +53,7 @@ function failingBodyResponse(): Response {
 describe('preview security headers', () => {
   it('sets security headers on every preview route', async () => {
     const app = createPreviewApp({ source: './content/index.md' })
-    const paths = ['/', '/health', '/assets/typeset.css']
+    const paths = ['/', '/web.html', '/web', '/health', '/assets/typeset.css', '/assets/web.css']
     const responses = []
     for (const path of paths) {
       responses.push(await app.request(path))
@@ -61,7 +61,7 @@ describe('preview security headers', () => {
     for (const res of responses) {
       assertSecurityHeaders(res.headers)
     }
-    assert.equal(responses.length, 3)
+    assert.equal(responses.length, 6)
   })
 
   it('sets security headers on error pages', async () => {
