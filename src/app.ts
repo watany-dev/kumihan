@@ -1,6 +1,9 @@
 import { readFile } from 'node:fs/promises'
+
 import { Hono } from 'hono'
+
 import { renderMarkdown } from './markdown/render.js'
+import { documentSecurityMeta, previewSecureHeaders } from './security/headers.js'
 import { renderDocument } from './typesetting/render-page.js'
 import { typesetCss } from './typesetting/typeset.css.js'
 
@@ -14,6 +17,7 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
   const title = config.title ?? 'Typeset Preview'
   const language = config.language ?? 'ja'
   const app = new Hono()
+  app.use('*', previewSecureHeaders())
 
   app.get('/health', (c) => c.json({ ok: true }))
 
@@ -64,6 +68,7 @@ function errorPage(status: number, heading: string, message: string): string {
 <html lang="ja">
 <head>
   <meta charset="utf-8">
+${documentSecurityMeta()}
   <title>${heading}</title>
 </head>
 <body>

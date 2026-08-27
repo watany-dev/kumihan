@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
+
 import { describe, it } from 'vite-plus/test'
+
 import { exportSite } from '../src/export/export-site.js'
 import { renderMarkdown } from '../src/markdown/render.js'
 import { renderDocument } from '../src/typesetting/render-page.js'
@@ -37,5 +39,14 @@ describe('exportSite', () => {
     assert.ok(index)
     const exported = await index.response.text()
     assert.equal(exported, preview)
+  })
+
+  it('forwards document options into the exported HTML', async () => {
+    const assets = exportSite('# Title', { title: 'Exported', language: 'en' })
+    const index = assets.find((asset) => asset.pathname === '/index.html')
+    assert.ok(index)
+    const html = await index.response.text()
+    assert.match(html, /<html lang="en">/)
+    assert.match(html, /<title>Exported<\/title>/)
   })
 })

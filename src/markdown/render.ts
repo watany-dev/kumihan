@@ -3,13 +3,22 @@ import { renderInline } from './inline.js'
 
 const HARD_BREAK = '\u0001'
 
+function lineAt(lines: readonly string[], index: number): string {
+  const line = lines[index]
+  if (typeof line === 'string') {
+    return line
+  }
+  /* v8 ignore next -- String#split produces a dense array */
+  return ''
+}
+
 export function renderMarkdown(source: string): string {
   const lines = source.replace(/\r\n?/g, '\n').split('\n')
   const blocks: string[] = []
   let i = 0
 
   while (i < lines.length) {
-    const line = lines[i] ?? ''
+    const line = lineAt(lines, i)
 
     if (line.trim() === '') {
       i += 1
@@ -71,9 +80,12 @@ function parseHeading(line: string): string | null {
     return null
   }
 
-  const level = match[1]?.length ?? 1
-  const text = (match[2] ?? '').trim()
-  return `<h${level}>${renderInline(text)}</h${level}>`
+  const markers = match[1]
+  const text = match[2]
+  /* v8 ignore next -- the heading regex always captures both groups */
+  if (markers === undefined || text === undefined) return null
+  const level = markers.length
+  return `<h${level}>${renderInline(text.trim())}</h${level}>`
 }
 
 function isHorizontalRule(line: string): boolean {
@@ -84,8 +96,8 @@ function parseFencedCode(lines: string[], start: number): { html: string; next: 
   const body: string[] = []
   let i = start + 1
 
-  while (i < lines.length && !lines[i]?.startsWith('```')) {
-    body.push(lines[i] ?? '')
+  while (i < lines.length && !lineAt(lines, i).startsWith('```')) {
+    body.push(lineAt(lines, i))
     i += 1
   }
 
@@ -103,8 +115,8 @@ function parseBlockquote(lines: string[], start: number): { html: string; next: 
   const inner: string[] = []
   let i = start
 
-  while (i < lines.length && (lines[i] ?? '').startsWith('>')) {
-    let content = (lines[i] ?? '').slice(1)
+  while (i < lines.length && lineAt(lines, i).startsWith('>')) {
+    let content = lineAt(lines, i).slice(1)
     if (content.startsWith(' ')) {
       content = content.slice(1)
     }
@@ -128,8 +140,8 @@ function parseList(
   const items: string[] = []
   let i = start
 
-  while (i < lines.length && marker.test(lines[i] ?? '')) {
-    const text = (lines[i] ?? '').replace(marker, '')
+  while (i < lines.length && marker.test(lineAt(lines, i))) {
+    const text = lineAt(lines, i).replace(marker, '')
     items.push(`<li>${renderInline(text)}</li>`)
     i += 1
   }
@@ -144,8 +156,8 @@ function parseParagraph(lines: string[], start: number): { html: string; next: n
   const collected: string[] = []
   let i = start
 
-  while (i < lines.length && (lines[i] ?? '').trim() !== '' && !isBlockStart(lines[i] ?? '')) {
-    collected.push(lines[i] ?? '')
+  while (i < lines.length && lineAt(lines, i).trim() !== '' && !isBlockStart(lineAt(lines, i))) {
+    collected.push(lineAt(lines, i))
     i += 1
   }
 
@@ -172,7 +184,7 @@ function joinParagraphLines(lines: string[]): string {
   let chunk = ''
 
   for (let i = 0; i < lines.length; i += 1) {
-    const raw = lines[i] ?? ''
+    const raw = lineAt(lines, i)
     const hardBreak = raw.endsWith('  ')
     const line = (hardBreak ? raw.slice(0, -2) : raw).trim()
 
@@ -188,11 +200,8 @@ function joinParagraphLines(lines: string[]): string {
 }
 
 function concatenateSoftBreak(previous: string, next: string): string {
-  if (previous.length === 0) return next
-  if (next.length === 0) return previous
-
-  const last = previous[previous.length - 1] ?? ''
-  const first = next[0] ?? ''
+  const last = previous.charAt(previous.length - 1)
+  const first = next.charAt(0)
   if (isCjk(last) || isCjk(first)) {
     return previous + next
   }
@@ -201,7 +210,7 @@ function concatenateSoftBreak(previous: string, next: string): string {
 }
 
 function isCjk(character: string): boolean {
-  const code = character.codePointAt(0) ?? 0
+  const code = character.charCodeAt(0)
   return (
     (code >= 0x3000 && code <= 0x30ff) ||
     (code >= 0x3400 && code <= 0x9fff) ||

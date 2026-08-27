@@ -1,4 +1,5 @@
 import { escapeHtml } from '../markdown/escape.js'
+import { documentSecurityMeta } from '../security/headers.js'
 
 export interface RenderDocumentOptions {
   title?: string
@@ -13,6 +14,7 @@ export function renderDocument(html: string, options?: RenderDocumentOptions): s
 <html lang="${language}">
 <head>
   <meta charset="utf-8">
+${documentSecurityMeta()}
   <title>${title}</title>
   <link rel="stylesheet" href="assets/typeset.css">
 </head>

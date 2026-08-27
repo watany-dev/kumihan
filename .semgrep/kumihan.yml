@@ -1,0 +1,38 @@
+rules:
+  - id: kumihan.no-dynamic-code-execution
+    message: Dynamic code execution is forbidden in the typesetting preview.
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: 'CWE-95'
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: new Function(...)
+      - pattern: setTimeout("$MSG", ...)
+      - pattern: setInterval("$MSG", ...)
+
+  - id: kumihan.no-html-injection-sinks
+    message: Assigning HTML from strings bypasses the Markdown HTML escaper.
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: 'CWE-79'
+    pattern-either:
+      - pattern: $EL.innerHTML = ...
+      - pattern: $EL.outerHTML = ...
+      - pattern: document.write(...)
+      - pattern: document.writeln(...)
+
+  - id: kumihan.no-javascript-urls
+    message: 'javascript: URLs must not appear in production source.'
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: 'CWE-79'
+    paths:
+      exclude:
+        - '**/test/**'
+    pattern-regex: '(?i)javascript\s*:'

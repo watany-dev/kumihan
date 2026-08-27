@@ -4,5 +4,6 @@ build/
 coverage/
 .vite/
 .vp/
+.vite-hooks/_
 *.log
 .DS_Store
