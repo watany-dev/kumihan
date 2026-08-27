@@ -328,10 +328,10 @@ body.feature {
 .magazine-typeset pre,
 .feature-typeset pre {
   column-span: all;
+  display: block;
   white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: anywhere;
-  break-inside: avoid;
   background: #f3f1ea;
   padding: 0.85em 1em;
   margin: 0.4em 0 1em;

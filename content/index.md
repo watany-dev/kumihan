@@ -12,7 +12,7 @@ English. Latin words keep a single space.
 
 本文はプレビューの種類によって書体と行長が変わります。1段組は明朝で A4 の全幅、2段組と特集はゴシックで B5 の段組です。**強調**や*斜体*、`inline code` も使えます。
 
-詳しい仕様は [GitHub](https://github.com/watany-dev/kumihan) を参照してください。段組では見出しとリードが全幅、本文が縦2列、コードが再び全幅になります。
+詳しい仕様は [GitHub](https://github.com/watany-dev/kumihan) を参照してください。段組では見出しとリードが全幅、本文が縦2列、コードが再び全幅になります。行長が短くなるので、技術誌の本文に近い密度で読めます。
 
 ### 引用とリスト
 
@@ -33,9 +33,13 @@ English. Latin words keep a single space.
 フェンス付きコードブロックは等幅で、折り返し可能です。2段組では段をまたいで全幅に置きます。狭い段の中に長い行を押し込むより、誌面のコード欄に近い読み方です。
 
 ```ts
-const value = 1
+export function greet(name: string): string {
+  return `hello, ${name}`
+}
 ```
 
 ## 雑誌組の考え方
 
 Software Design や WEB+DB PRESS のような技術誌は、本文を縦2列に流し、特集の入りだけタイトルを大きく取ります。kumihan の「2段」は継続ページ、「特集」は扉ページを模しています。印刷時の用紙サイズは B5 です。
+
+1段組はレポートや書籍、Web は画面の読み幅、段組は雑誌の本文、という使い分けを想定しています。同じ原稿を保存したまま、表示だけを切り替えられます。
