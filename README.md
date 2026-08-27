@@ -20,7 +20,6 @@ Hono Preview              Static Export
   │                         │
   ├ /            1段組      ├ dist/index.html
   ├ /magazine.html 2段組    ├ dist/magazine.html
-  ├ /feature.html  特集     ├ dist/feature.html
   └ /web.html      Web      ├ dist/web.html
                             └ dist/assets/*
                                   │
@@ -72,19 +71,16 @@ http://127.0.0.1:3000 を開きます。
 
 ## HTTP
 
-| 経路                       | 内容                                            |
-| -------------------------- | ----------------------------------------------- |
-| `GET /`                    | `content/index.md` を読み、A4 1段組 HTML を返す |
-| `GET /magazine.html`       | 同じ原稿を B5 2段組（雑誌本文）で返す           |
-| `GET /magazine`            | `/magazine.html` と同じ                         |
-| `GET /feature.html`        | 同じ原稿を B5 特集扉（2段組）で返す             |
-| `GET /feature`             | `/feature.html` と同じ                          |
-| `GET /web.html`            | 同じ原稿を Web 記事スタイルで返す               |
-| `GET /web`                 | `/web.html` と同じ Web 記事ビュー               |
-| `GET /health`              | `{ "ok": true }`                                |
-| `GET /assets/typeset.css`  | 1段組 CSS                                       |
-| `GET /assets/magazine.css` | 2段組 / 特集 CSS                                |
-| `GET /assets/web.css`      | Web 記事 CSS                                    |
+| 経路                      | 内容                                            |
+| ------------------------- | ----------------------------------------------- |
+| `GET /`                   | `content/index.md` を読み、A4 1段組 HTML を返す |
+| `GET /magazine.html`      | 同じ原稿を A4 2段組で返す                       |
+| `GET /magazine`           | `/magazine.html` と同じ                         |
+| `GET /web.html`           | 同じ原稿を Web 記事スタイルで返す               |
+| `GET /web`                | `/web.html` と同じ Web 記事ビュー               |
+| `GET /health`             | `{ "ok": true }`                                |
+| `GET /assets/typeset.css` | 組版 CSS（1段 / 2段）                           |
+| `GET /assets/web.css`     | Web 記事 CSS                                    |
 
 `GET /` は毎回ファイルを読み直し、`Cache-Control: no-store` で返します。v0.1 の live reload はブラウザの手動更新です。
 
@@ -117,16 +113,7 @@ HTML は必ず escape します。リンクは `https:` / `http:` / `mailto:` / 
 
 Preview の既定表示は A4 の1段組です。本文は明朝、見出しはゴシック、code は等幅です。印刷時は `@page { size: A4; }` を使います。
 
-同じ原稿を、技術誌に近い段組でも見られます。切り替えはページ右上（Web ではヘッダー）の表示モードから行い、JavaScript は使いません。
-
-| モード | 用紙   | 本文                         | 向いているページ |
-| ------ | ------ | ---------------------------- | ---------------- |
-| 組版   | A4 1段 | 明朝 10.5pt                  | 書籍・レポート   |
-| 2段    | B5 2段 | ゴシック 9pt                 | 雑誌の本文ページ |
-| 特集   | B5 2段 | ゴシック 9pt、大きな扉見出し | 特集の入り       |
-| Web    | 画面幅 | ゴシック                     | ブラウザ向け記事 |
-
-2段組は _Software Design_ や _WEB+DB PRESS_ のような IT 雑誌の本文を模しています。見出しとリードは全幅、本文は縦2列、コードブロックは再び全幅です。引用は NOTE（2段）/ POINT（特集）の囲みになります。ロゴや誌面そのものは複製していません。
+`/magazine.html` は同じ原稿をページ内の縦2列にします。見出し・リード・コードは全幅、本文が2段です。切り替えは右上（Web ではヘッダー）の表示モードから行い、JavaScript は使いません。
 
 ## Web 記事
 
@@ -150,11 +137,9 @@ bun run export
 dist/
 ├─ index.html
 ├─ magazine.html
-├─ feature.html
 ├─ web.html
 └─ assets/
    ├─ typeset.css
-   ├─ magazine.css
    └─ web.css
 ```
 
@@ -175,7 +160,6 @@ import { createPreviewApp } from './src/app.ts'
 const fragment = renderMarkdown(markdown)
 const document = renderDocument(fragment)
 const magazine = renderDocument(fragment, { mode: 'magazine' })
-const feature = renderDocument(fragment, { mode: 'feature' })
 const webDocument = renderDocument(fragment, { mode: 'web' })
 const assets = exportSite(markdown)
 const app = createPreviewApp({

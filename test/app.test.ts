@@ -3,7 +3,6 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'vite-plus/test'
 
 import { createPreviewApp } from '../src/app.js'
-import { magazineCss } from '../src/typesetting/magazine.css.js'
 import { typesetCss } from '../src/typesetting/typeset.css.js'
 import { webCss } from '../src/typesetting/web.css.js'
 
@@ -22,16 +21,9 @@ describe('preview app', () => {
     assert.equal(res.status, 200)
     assert.equal(res.headers.get('Content-Type'), 'text/css; charset=utf-8')
     assert.equal(res.headers.get('Cache-Control'), 'no-store')
-    assert.equal(await res.text(), typesetCss)
-  })
-
-  it('serves magazine css', async () => {
-    const app = createPreviewApp({ source: './content/index.md' })
-    const res = await app.request('/assets/magazine.css')
-    assert.equal(res.status, 200)
-    assert.equal(res.headers.get('Content-Type'), 'text/css; charset=utf-8')
-    assert.equal(res.headers.get('Cache-Control'), 'no-store')
-    assert.equal(await res.text(), magazineCss)
+    const css = await res.text()
+    assert.equal(css, typesetCss)
+    assert.match(css, /column-count:\s*2/)
   })
 
   it('serves web article css', async () => {
@@ -54,11 +46,10 @@ describe('preview app', () => {
     assert.match(html, /<article class="typeset">/)
     assert.match(html, /aria-label="表示モード"/)
     assert.match(html, /href="magazine.html"/)
-    assert.match(html, /href="feature.html"/)
     assert.match(html, /href="web.html"/)
   })
 
-  it('renders the two-column magazine view', async () => {
+  it('renders the two-column view', async () => {
     const app = createPreviewApp({ source: './content/index.md' })
     const magazineHtml = await app.request('/magazine.html')
     const magazineAlias = await app.request('/magazine')
@@ -67,25 +58,9 @@ describe('preview app', () => {
     const html = await magazineHtml.text()
     const alias = await magazineAlias.text()
     assert.equal(html, alias)
-    assert.match(html, /<body class="magazine">/)
-    assert.match(html, /<article class="typeset magazine-typeset">/)
-    assert.match(html, /href="assets\/magazine.css"/)
+    assert.match(html, /<article class="typeset cols-2">/)
+    assert.match(html, /href="assets\/typeset.css"/)
     assert.match(html, /aria-current="page">2段</)
-  })
-
-  it('renders the magazine feature view', async () => {
-    const app = createPreviewApp({ source: './content/index.md' })
-    const featureHtml = await app.request('/feature.html')
-    const featureAlias = await app.request('/feature')
-    assert.equal(featureHtml.status, 200)
-    assert.equal(featureAlias.status, 200)
-    const html = await featureHtml.text()
-    const alias = await featureAlias.text()
-    assert.equal(html, alias)
-    assert.match(html, /<body class="feature">/)
-    assert.match(html, /<article class="typeset feature-typeset">/)
-    assert.match(html, /href="assets\/magazine.css"/)
-    assert.match(html, /aria-current="page">特集</)
   })
 
   it('renders the web article view', async () => {

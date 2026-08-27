@@ -149,6 +149,21 @@ body {
   font-size: inherit;
 }
 
+.typeset.cols-2 {
+  column-count: 2;
+  column-gap: 8mm;
+  column-rule: 0.3pt solid #d0cdc6;
+  font-size: 9.5pt;
+  line-height: 1.75;
+}
+
+.typeset.cols-2 h1,
+.typeset.cols-2 h1 + p,
+.typeset.cols-2 pre,
+.typeset.cols-2 hr {
+  column-span: all;
+}
+
 .mode-switch {
   position: fixed;
   top: 12px;

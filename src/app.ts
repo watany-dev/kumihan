@@ -4,7 +4,6 @@ import { Hono, type Context } from 'hono'
 
 import { renderMarkdown } from './markdown/render.js'
 import { documentSecurityMeta, previewSecureHeaders } from './security/headers.js'
-import { magazineCss } from './typesetting/magazine.css.js'
 import { renderDocument, type PreviewMode } from './typesetting/render-page.js'
 import { typesetCss } from './typesetting/typeset.css.js'
 import { webCss } from './typesetting/web.css.js'
@@ -34,14 +33,11 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
   app.get('/health', (c) => c.json({ ok: true }))
 
   app.get('/assets/typeset.css', (c) => c.body(typesetCss, 200, CSS_HEADERS))
-  app.get('/assets/magazine.css', (c) => c.body(magazineCss, 200, CSS_HEADERS))
   app.get('/assets/web.css', (c) => c.body(webCss, 200, CSS_HEADERS))
 
   app.get('/', (c) => serveManuscript(c, 'print'))
   app.get('/magazine.html', (c) => serveManuscript(c, 'magazine'))
   app.get('/magazine', (c) => serveManuscript(c, 'magazine'))
-  app.get('/feature.html', (c) => serveManuscript(c, 'feature'))
-  app.get('/feature', (c) => serveManuscript(c, 'feature'))
   app.get('/web.html', (c) => serveManuscript(c, 'web'))
   app.get('/web', (c) => serveManuscript(c, 'web'))
 

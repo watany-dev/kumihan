@@ -57,13 +57,10 @@ describe('preview security headers', () => {
       '/',
       '/magazine.html',
       '/magazine',
-      '/feature.html',
-      '/feature',
       '/web.html',
       '/web',
       '/health',
       '/assets/typeset.css',
-      '/assets/magazine.css',
       '/assets/web.css',
     ]
     const responses = []
@@ -73,7 +70,7 @@ describe('preview security headers', () => {
     for (const res of responses) {
       assertSecurityHeaders(res.headers)
     }
-    assert.equal(responses.length, 11)
+    assert.equal(responses.length, 8)
   })
 
   it('sets security headers on error pages', async () => {

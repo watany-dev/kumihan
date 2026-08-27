@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'vite-plus/test'
 
 import { renderMarkdown } from '../src/markdown/render.js'
-import { renderDocument, resolvePreviewMode } from '../src/typesetting/render-page.js'
+import { renderDocument } from '../src/typesetting/render-page.js'
 
 describe('renderDocument', () => {
   it('generates a complete HTML document', () => {
@@ -26,7 +26,6 @@ describe('renderDocument', () => {
     assert.match(html, /aria-label="表示モード"/)
     assert.match(html, /aria-current="page">組版</)
     assert.match(html, /href="magazine.html"/)
-    assert.match(html, /href="feature.html"/)
     assert.match(html, /href="web.html"/)
     assert.match(html, /<\/html>\s*$/)
   })
@@ -52,38 +51,18 @@ describe('renderDocument', () => {
     assert.match(html, /aria-current="page">Web</)
     assert.match(html, /href="\.\/"/)
     assert.match(html, /href="magazine.html"/)
-    assert.match(html, /href="feature.html"/)
     assert.match(html, /<\/html>\s*$/)
   })
 
-  it('generates a two-column magazine document', () => {
+  it('generates a two-column print document', () => {
     const html = renderDocument(renderMarkdown('# 見出し\n\n導入です。'), {
       title: '2段',
       mode: 'magazine',
     })
 
-    assert.match(html, /<body class="magazine">/)
-    assert.match(html, /<div class="paper magazine-sheet">/)
-    assert.match(html, /<header class="masthead">/)
-    assert.match(html, /<article class="typeset magazine-typeset">/)
-    assert.match(html, /href="assets\/magazine.css"/)
+    assert.match(html, /<article class="typeset cols-2">/)
+    assert.match(html, /href="assets\/typeset.css"/)
     assert.match(html, /aria-current="page">2段</)
-    assert.equal(html.includes('name="viewport"'), false)
-  })
-
-  it('generates a magazine feature document', () => {
-    const html = renderDocument(renderMarkdown('# 見出し\n\n導入です。'), {
-      title: '特集',
-      mode: 'feature',
-    })
-
-    assert.match(html, /<body class="feature">/)
-    assert.match(html, /<div class="paper feature-sheet">/)
-    assert.match(html, /<header class="feature-band">/)
-    assert.match(html, /<p class="feature-kicker">特集<\/p>/)
-    assert.match(html, /<article class="typeset feature-typeset">/)
-    assert.match(html, /href="assets\/magazine.css"/)
-    assert.match(html, /aria-current="page">特集</)
     assert.equal(html.includes('name="viewport"'), false)
   })
 
@@ -99,13 +78,7 @@ describe('renderDocument', () => {
     const html = renderDocument('<p>ok</p>', { mode: 'print' })
     assert.match(html, /<div class="paper">/)
     assert.match(html, /href="assets\/typeset.css"/)
-  })
-
-  it('falls back to print for an unknown mode', () => {
-    const html = renderDocument('<p>ok</p>', { mode: resolvePreviewMode('leaflet') })
-    assert.match(html, /<div class="paper">/)
-    assert.match(html, /href="assets\/typeset.css"/)
-    assert.equal(html.includes('class="magazine"'), false)
+    assert.equal(html.includes('cols-2'), false)
   })
 
   it('escapes document title', () => {
