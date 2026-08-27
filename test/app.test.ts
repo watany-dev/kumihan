@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
+
 import { describe, it } from 'vite-plus/test'
+
 import { createPreviewApp } from '../src/app.js'
 import { typesetCss } from '../src/typesetting/typeset.css.js'
 

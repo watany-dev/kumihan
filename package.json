@@ -4,14 +4,21 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "audit": "bun audit",
+    "check": "vp check",
     "dev": "bun src/server.ts",
-    "export": "bun scripts/export.ts"
+    "export": "bun scripts/export.ts",
+    "fmt": "vp fmt",
+    "lint": "vp lint",
+    "test": "vp test",
+    "test:coverage": "vp test --coverage"
   },
   "dependencies": {
     "hono": "4.13.5"
   },
   "devDependencies": {
     "@types/node": "22.19.21",
+    "@vitest/coverage-v8": "4.1.11",
     "vite-plus": "0.3.0"
   },
   "devEngines": {

@@ -33,7 +33,7 @@ export function renderInline(source: string): string {
       continue
     }
 
-    html += escapeHtml(source[i] ?? '')
+    html += escapeHtml(source.charAt(i))
     i += 1
   }
 

@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+
 import { exportSite } from '../src/export/export-site.js'
 
 const markdown = await readFile('./content/index.md', 'utf8')

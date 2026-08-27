@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
+
 import { describe, it } from 'vite-plus/test'
+
 import { renderMarkdown } from '../src/markdown/render.js'
 import { renderDocument } from '../src/typesetting/render-page.js'
 

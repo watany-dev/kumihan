@@ -4,7 +4,7 @@ GitHub Codespaces 上で Markdown 原稿を編集し、Hono が組版済み HTML
 
 個人または小規模な執筆・組版作業を対象にした v0.1 です。VS Code Extension、CMS、データベース、独自デプロイ基盤は含みません。
 
-ツールチェーンは [Vite+](https://viteplus.dev/)（`vp`）と [Bun](https://bun.sh/) です。CI は GitHub Actions で、`actionlint` と `zizmor` がワークフローを検査します。
+ツールチェーンは [Vite+](https://viteplus.dev/)（`vp`）と [Bun](https://bun.sh/) です。CI は GitHub Actions で、`actionlint` と `zizmor` がワークフローを検査し、Semgrep・Gitleaks・`bun audit` がセキュリティ検査を行います。テストカバレッジは `src/**` に対して 95% 以上を要求します。
 
 ```
 VS Code
@@ -56,14 +56,16 @@ http://127.0.0.1:3000 を開きます。
 
 ## コマンド
 
-| コマンド         | 内容                                |
-| ---------------- | ----------------------------------- |
-| `bun run dev`    | Preview server を起動する           |
-| `vp check`       | フォーマット・lint・型チェック      |
-| `vp test`        | parser / renderer / HTTP のテスト   |
-| `bun run export` | `dist/index.html` と CSS を生成する |
+| コマンド             | 内容                                           |
+| -------------------- | ---------------------------------------------- |
+| `bun run dev`        | Preview server を起動する                      |
+| `vp check`           | フォーマット・lint（警告もエラー）・型チェック |
+| `vp test`            | parser / renderer / HTTP のテスト              |
+| `vp test --coverage` | 同上。`src/**` のカバレッジ 95% を要求する     |
+| `bun run export`     | `dist/index.html` と CSS を生成する            |
+| `bun audit`          | 依存関係の脆弱性を検査する                     |
 
-`vp fmt` / `vp lint` で個別にも実行できます。
+`vp fmt` / `vp lint` で個別にも実行できます。Oxlint は `correctness` と `suspicious` を error、`perf` を warn とし、`denyWarnings` で警告も CI を失敗させます。eval・`javascript:` URL・import cycle などのセキュリティ規則は個別に error です。Oxfmt は `printWidth: 100`、単一引用符、セミコロンなし、import 整列を強制します。
 
 ## HTTP
 
@@ -74,6 +76,8 @@ http://127.0.0.1:3000 を開きます。
 | `GET /assets/typeset.css` | 組版 CSS                                    |
 
 `GET /` は毎回ファイルを読み直し、`Cache-Control: no-store` で返します。v0.1 の live reload はブラウザの手動更新です。
+
+すべての応答に Content-Security-Policy（`script-src 'none'`）、`X-Frame-Options: DENY`、`X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer`、Permissions-Policy を付けます。静的 HTML にも同じ CSP を `<meta>` で埋めます。
 
 原稿が無い場合は分かりやすい 404 HTML を返します。読み込み失敗時は 500 を返し、stack trace はブラウザへ出しません。
 
@@ -123,7 +127,7 @@ dist/
 
 `main` への push で GitHub Actions が `vp install --frozen-lockfile` → `vp test` → `vp run export` → GitHub Pages へ deploy します。リポジトリの Pages 設定は **GitHub Actions** を選んでください。
 
-CI ではこれに加えて `vp check`、`actionlint`、`zizmor` を実行します。GitHub Actions はコミット SHA にピン留めし、Dependabot が週次で更新します。
+CI ではこれに加えて `vp check`、カバレッジ 95%、`actionlint`、`zizmor` を実行します。セキュリティ用ワークフローは Semgrep、Gitleaks、`bun audit` を weekly でも回します。GitHub Actions はコミット SHA にピン留めし、Dependabot が週次で更新します。脆弱性の報告手順は [SECURITY.md](SECURITY.md) を見てください。
 
 ## Public API
 
