@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { describe, it } from 'node:test'
+import { describe, it } from 'vite-plus/test'
 import { renderMarkdown } from '../src/markdown/render.js'
 import { renderDocument } from '../src/typesetting/render-page.js'
 
@@ -52,5 +52,10 @@ describe('unsafe URL rejection', () => {
     const html = renderMarkdown('[x](https://example.com/"onclick="alert)')
     assert.equal(html.includes('onclick="'), false)
     assert.match(html, /href="https:\/\/example.com\/&quot;onclick=&quot;alert"/)
+  })
+
+  it('rejects URLs that contain control characters', () => {
+    const html = renderMarkdown('[x](https://example.com/\u0000evil)')
+    assert.match(html, /href="#"/)
   })
 })

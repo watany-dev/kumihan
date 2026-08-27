@@ -10,9 +10,7 @@ export interface PreviewConfig {
   language?: string
 }
 
-export function createPreviewApp(
-  config: PreviewConfig = { source: './content/index.md' },
-): Hono {
+export function createPreviewApp(config: PreviewConfig = { source: './content/index.md' }): Hono {
   const title = config.title ?? 'Typeset Preview'
   const language = config.language ?? 'ja'
   const app = new Hono()
@@ -36,12 +34,19 @@ export function createPreviewApp(
       })
     } catch (error) {
       if (isNotFound(error)) {
-        return c.html(errorPage(404, '原稿が見つかりません', '指定された Markdown ファイルが存在しません。'), 404)
+        return c.html(
+          errorPage(404, '原稿が見つかりません', '指定された Markdown ファイルが存在しません。'),
+          404,
+        )
       }
 
       console.error('[kumihan] Failed to read markdown source:', error)
       return c.html(
-        errorPage(500, '読み込みに失敗しました', 'Markdown ファイルの読み込み中にエラーが発生しました。'),
+        errorPage(
+          500,
+          '読み込みに失敗しました',
+          'Markdown ファイルの読み込み中にエラーが発生しました。',
+        ),
         500,
       )
     }

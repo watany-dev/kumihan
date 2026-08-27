@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { describe, it } from 'node:test'
+import { describe, it } from 'vite-plus/test'
 import { exportSite } from '../src/export/export-site.js'
 import { renderMarkdown } from '../src/markdown/render.js'
 import { renderDocument } from '../src/typesetting/render-page.js'
@@ -25,14 +25,8 @@ describe('exportSite', () => {
     assert.ok(index)
     assert.ok(css)
 
-    assert.equal(
-      index.response.headers.get('Content-Type'),
-      'text/html; charset=utf-8',
-    )
-    assert.equal(
-      css.response.headers.get('Content-Type'),
-      'text/css; charset=utf-8',
-    )
+    assert.equal(index.response.headers.get('Content-Type'), 'text/html; charset=utf-8')
+    assert.equal(css.response.headers.get('Content-Type'), 'text/css; charset=utf-8')
     assert.equal(await css.response.text(), typesetCss)
   })
 

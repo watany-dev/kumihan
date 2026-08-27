@@ -7,9 +7,19 @@ export function escapeHtml(text: string): string {
     .replaceAll("'", '&#39;')
 }
 
+function hasC0Control(text: string): boolean {
+  for (let i = 0; i < text.length; i += 1) {
+    const code = text.charCodeAt(i)
+    if (code <= 0x1f || code === 0x7f) {
+      return true
+    }
+  }
+  return false
+}
+
 export function sanitizeUrl(url: string): string {
   const trimmed = url.trim()
-  if (trimmed.length === 0 || /[\u0000-\u001F\u007F]/.test(trimmed)) {
+  if (trimmed.length === 0 || hasC0Control(trimmed)) {
     return '#'
   }
 
