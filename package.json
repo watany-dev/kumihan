@@ -1,0 +1,27 @@
+{
+  "name": "kumihan",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Hono Markdown typesetting preview for GitHub Codespaces",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "tsx src/server.ts",
+    "build": "tsc",
+    "export": "tsx scripts/export.ts",
+    "test": "tsx --test test/*.test.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "hono": "^4"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "tsx": "^4",
+    "typescript": "^5"
+  }
+}
