@@ -1,6 +1,4 @@
-export const typesetCss = `/* kumihan typesetting — A4 landscape-width, horizontal writing */
-
-@page {
+export const typesetCss = `@page {
   size: A4;
   margin: 0;
 }

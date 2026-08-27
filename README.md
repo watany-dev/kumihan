@@ -114,12 +114,10 @@ dist/
 renderer は Hono と Node filesystem から独立しています。
 
 ```ts
-import {
-  renderMarkdown,
-  renderDocument,
-  exportSite,
-  createPreviewApp,
-} from './src/index.ts'
+import { renderMarkdown } from './src/markdown/render.ts'
+import { renderDocument } from './src/typesetting/render-page.ts'
+import { exportSite } from './src/export/export-site.ts'
+import { createPreviewApp } from './src/app.ts'
 
 const fragment = renderMarkdown(markdown)
 const document = renderDocument(fragment)

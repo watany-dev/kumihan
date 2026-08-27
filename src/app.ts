@@ -1,12 +1,7 @@
 import { readFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
 import { Hono } from 'hono'
 import { renderMarkdown } from './markdown/render.js'
-import {
-  DEFAULT_LANGUAGE,
-  DEFAULT_TITLE,
-  renderDocument,
-} from './typesetting/render-page.js'
+import { renderDocument } from './typesetting/render-page.js'
 import { typesetCss } from './typesetting/typeset.css.js'
 
 export interface PreviewConfig {
@@ -15,14 +10,11 @@ export interface PreviewConfig {
   language?: string
 }
 
-const DEFAULT_SOURCE = './content/index.md'
-
-export function createPreviewApp(config: PreviewConfig = { source: DEFAULT_SOURCE }): Hono {
-  const source = config.source || DEFAULT_SOURCE
-  const title = config.title ?? DEFAULT_TITLE
-  const language = config.language ?? DEFAULT_LANGUAGE
-  const sourcePath = resolve(source)
-
+export function createPreviewApp(
+  config: PreviewConfig = { source: './content/index.md' },
+): Hono {
+  const title = config.title ?? 'Typeset Preview'
+  const language = config.language ?? 'ja'
   const app = new Hono()
 
   app.get('/health', (c) => c.json({ ok: true }))
@@ -36,7 +28,7 @@ export function createPreviewApp(config: PreviewConfig = { source: DEFAULT_SOURC
 
   app.get('/', async (c) => {
     try {
-      const markdown = await readFile(sourcePath, 'utf8')
+      const markdown = await readFile(config.source, 'utf8')
       const html = renderDocument(renderMarkdown(markdown), { title, language })
       return c.body(html, 200, {
         'Content-Type': 'text/html; charset=utf-8',
@@ -59,12 +51,7 @@ export function createPreviewApp(config: PreviewConfig = { source: DEFAULT_SOURC
 }
 
 function isNotFound(error: unknown): boolean {
-  return Boolean(
-    error &&
-      typeof error === 'object' &&
-      'code' in error &&
-      (error as { code?: string }).code === 'ENOENT',
-  )
+  return error instanceof Error && 'code' in error && error.code === 'ENOENT'
 }
 
 function errorPage(status: number, heading: string, message: string): string {
@@ -72,12 +59,7 @@ function errorPage(status: number, heading: string, message: string): string {
 <html lang="ja">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${heading}</title>
-  <style>
-    body { font-family: sans-serif; margin: 12vh auto; max-width: 36em; line-height: 1.7; color: #222; }
-    p { color: #555; }
-  </style>
 </head>
 <body>
   <h1>${status} ${heading}</h1>

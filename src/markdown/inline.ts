@@ -5,7 +5,7 @@ export function renderInline(source: string): string {
   let html = ''
 
   while (i < source.length) {
-    const code = parseInlineCode(source, i)
+    const code = parseDelimited(source, i, '`')
     if (code) {
       html += `<code>${escapeHtml(code.text)}</code>`
       i = code.end
@@ -14,8 +14,7 @@ export function renderInline(source: string): string {
 
     const link = parseLink(source, i)
     if (link) {
-      const href = escapeHtml(sanitizeUrl(link.url))
-      html += `<a href="${href}">${renderInline(link.text)}</a>`
+      html += `<a href="${escapeHtml(sanitizeUrl(link.url))}">${renderInline(link.text)}</a>`
       i = link.end
       continue
     }
@@ -41,43 +40,15 @@ export function renderInline(source: string): string {
   return html
 }
 
-function parseInlineCode(
-  source: string,
-  start: number,
-): { text: string; end: number } | null {
-  if (source[start] !== '`') {
-    return null
-  }
-
-  const close = source.indexOf('`', start + 1)
-  if (close === -1 || close === start + 1) {
-    return null
-  }
-
-  return {
-    text: source.slice(start + 1, close),
-    end: close + 1,
-  }
-}
-
 function parseLink(
   source: string,
   start: number,
 ): { text: string; url: string; end: number } | null {
-  if (source[start] !== '[') {
-    return null
-  }
-
+  if (source[start] !== '[') return null
   const mid = source.indexOf('](', start + 1)
-  if (mid === -1) {
-    return null
-  }
-
+  if (mid === -1) return null
   const end = source.indexOf(')', mid + 2)
-  if (end === -1) {
-    return null
-  }
-
+  if (end === -1) return null
   return {
     text: source.slice(start + 1, mid),
     url: source.slice(mid + 2, end),
@@ -90,15 +61,9 @@ function parseDelimited(
   start: number,
   delimiter: string,
 ): { text: string; end: number } | null {
-  if (!source.startsWith(delimiter, start)) {
-    return null
-  }
-
+  if (!source.startsWith(delimiter, start)) return null
   const close = source.indexOf(delimiter, start + delimiter.length)
-  if (close === -1 || close === start + delimiter.length) {
-    return null
-  }
-
+  if (close === -1 || close === start + delimiter.length) return null
   return {
     text: source.slice(start + delimiter.length, close),
     end: close + delimiter.length,

@@ -7,28 +7,17 @@ export function escapeHtml(text: string): string {
     .replaceAll("'", '&#39;')
 }
 
-const SAFE_HREF = '#'
-
 export function sanitizeUrl(url: string): string {
   const trimmed = url.trim()
-  if (trimmed.length === 0) {
-    return SAFE_HREF
-  }
-
-  if (/[\u0000-\u001F\u007F]/.test(trimmed)) {
-    return SAFE_HREF
+  if (trimmed.length === 0 || /[\u0000-\u001F\u007F]/.test(trimmed)) {
+    return '#'
   }
 
   const compact = trimmed.replace(/\s+/g, '')
-  const schemeMatch = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(compact)
-  if (!schemeMatch) {
+  const scheme = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(compact)?.[1]?.toLowerCase()
+  if (!scheme || scheme === 'https' || scheme === 'http' || scheme === 'mailto') {
     return trimmed
   }
 
-  const scheme = schemeMatch[1].toLowerCase()
-  if (scheme === 'https' || scheme === 'http' || scheme === 'mailto') {
-    return trimmed
-  }
-
-  return SAFE_HREF
+  return '#'
 }

@@ -4,7 +4,7 @@ import { renderInline } from './inline.js'
 const HARD_BREAK = '\u0001'
 
 export function renderMarkdown(source: string): string {
-  const lines = normalizeNewlines(source).split('\n')
+  const lines = source.replace(/\r\n?/g, '\n').split('\n')
   const blocks: string[] = []
   let i = 0
 
@@ -63,10 +63,6 @@ export function renderMarkdown(source: string): string {
   }
 
   return blocks.join('\n')
-}
-
-function normalizeNewlines(source: string): string {
-  return source.replaceAll('\r\n', '\n').replaceAll('\r', '\n')
 }
 
 function parseHeading(line: string): string | null {
@@ -218,16 +214,11 @@ function concatenateSoftBreak(previous: string, next: string): string {
 }
 
 function isCjk(character: string): boolean {
-  const code = character.codePointAt(0)
-  if (code === undefined) {
-    return false
-  }
-
+  const code = character.codePointAt(0) ?? 0
   return (
-    (code >= 0x3040 && code <= 0x30ff) ||
+    (code >= 0x3000 && code <= 0x30ff) ||
     (code >= 0x3400 && code <= 0x9fff) ||
-    (code >= 0x3000 && code <= 0x303f) ||
-    (code >= 0xff00 && code <= 0xffef) ||
-    (code >= 0xf900 && code <= 0xfaff)
+    (code >= 0xf900 && code <= 0xfaff) ||
+    (code >= 0xff00 && code <= 0xffef)
   )
 }
