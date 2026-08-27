@@ -149,9 +149,54 @@ body {
   font-size: inherit;
 }
 
+.mode-switch {
+  position: fixed;
+  top: 12px;
+  right: 16px;
+  z-index: 10;
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid #c8c2b6;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(40, 30, 20, 0.12);
+  font-family:
+    "Hiragino Kaku Gothic ProN",
+    "Yu Gothic",
+    "YuGothic",
+    sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mode-switch-link {
+  display: inline-block;
+  padding: 0.45em 1.1em;
+  color: #444444;
+  text-decoration: none;
+}
+
+.mode-switch-link.is-active {
+  color: #ffffff;
+  background: #1a1a1a;
+}
+
+.mode-switch-link:not(.is-active):hover {
+  background: #f4f1ea;
+}
+
+.mode-switch-link:focus-visible {
+  outline: 2px solid #1a1a1a;
+  outline-offset: -2px;
+}
+
 @media print {
   body {
     background: #ffffff;
+  }
+
+  .mode-switch {
+    display: none;
   }
 
   .paper {

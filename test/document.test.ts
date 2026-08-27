@@ -23,13 +23,47 @@ describe('renderDocument', () => {
     assert.match(html, /<article class="typeset">/)
     assert.match(html, /<h1>見出し<\/h1>/)
     assert.match(html, /href="assets\/typeset.css"/)
+    assert.match(html, /aria-label="表示モード"/)
+    assert.match(html, /aria-current="page">組版</)
+    assert.match(html, /href="web.html"/)
     assert.match(html, /<\/html>\s*$/)
   })
 
-  it('uses default title and language', () => {
+  it('generates a web article document', () => {
+    const html = renderDocument(renderMarkdown('# 見出し\n\n導入です。'), {
+      title: 'Web',
+      language: 'ja',
+      mode: 'web',
+    })
+
+    assert.match(html, /^<!DOCTYPE html>/)
+    assert.match(html, /<html lang="ja">/)
+    assert.match(html, /<title>Web<\/title>/)
+    assert.match(html, /name="viewport" content="width=device-width, initial-scale=1"/)
+    assert.match(html, /http-equiv="Content-Security-Policy"/)
+    assert.equal(html.includes('frame-ancestors'), false)
+    assert.equal(html.includes('class="paper"'), false)
+    assert.match(html, /<body class="web">/)
+    assert.match(html, /<article class="article">/)
+    assert.match(html, /<h1>見出し<\/h1>/)
+    assert.match(html, /href="assets\/web.css"/)
+    assert.match(html, /aria-current="page">Web</)
+    assert.match(html, /href="\.\/"/)
+    assert.match(html, /<\/html>\s*$/)
+  })
+
+  it('uses default title, language, and print mode', () => {
     const html = renderDocument('<p>ok</p>')
     assert.match(html, /<html lang="ja">/)
     assert.match(html, /<title>Typeset Preview<\/title>/)
+    assert.match(html, /<div class="paper">/)
+    assert.equal(html.includes('name="viewport"'), false)
+  })
+
+  it('accepts an explicit print mode', () => {
+    const html = renderDocument('<p>ok</p>', { mode: 'print' })
+    assert.match(html, /<div class="paper">/)
+    assert.match(html, /href="assets\/typeset.css"/)
   })
 
   it('escapes document title', () => {

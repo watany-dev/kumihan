@@ -1,17 +1,28 @@
 import { readFile } from 'node:fs/promises'
 
-import { Hono } from 'hono'
+import { Hono, type Context } from 'hono'
 
 import { renderMarkdown } from './markdown/render.js'
 import { documentSecurityMeta, previewSecureHeaders } from './security/headers.js'
-import { renderDocument } from './typesetting/render-page.js'
+import { renderDocument, type PreviewMode } from './typesetting/render-page.js'
 import { typesetCss } from './typesetting/typeset.css.js'
+import { webCss } from './typesetting/web.css.js'
 
 export interface PreviewConfig {
   source: string
   title?: string
   language?: string
 }
+
+const HTML_HEADERS = {
+  'Content-Type': 'text/html; charset=utf-8',
+  'Cache-Control': 'no-store',
+} as const
+
+const CSS_HEADERS = {
+  'Content-Type': 'text/css; charset=utf-8',
+  'Cache-Control': 'no-store',
+} as const
 
 export function createPreviewApp(config: PreviewConfig = { source: './content/index.md' }): Hono {
   const title = config.title ?? 'Typeset Preview'
@@ -21,21 +32,18 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
 
   app.get('/health', (c) => c.json({ ok: true }))
 
-  app.get('/assets/typeset.css', (c) =>
-    c.body(typesetCss, 200, {
-      'Content-Type': 'text/css; charset=utf-8',
-      'Cache-Control': 'no-store',
-    }),
-  )
+  app.get('/assets/typeset.css', (c) => c.body(typesetCss, 200, CSS_HEADERS))
+  app.get('/assets/web.css', (c) => c.body(webCss, 200, CSS_HEADERS))
 
-  app.get('/', async (c) => {
+  app.get('/', (c) => serveManuscript(c, 'print'))
+  app.get('/web.html', (c) => serveManuscript(c, 'web'))
+  app.get('/web', (c) => serveManuscript(c, 'web'))
+
+  async function serveManuscript(c: Context, mode: PreviewMode) {
     try {
       const markdown = await readFile(config.source, 'utf8')
-      const html = renderDocument(renderMarkdown(markdown), { title, language })
-      return c.body(html, 200, {
-        'Content-Type': 'text/html; charset=utf-8',
-        'Cache-Control': 'no-store',
-      })
+      const html = renderDocument(renderMarkdown(markdown), { title, language, mode })
+      return c.body(html, 200, HTML_HEADERS)
     } catch (error) {
       if (isNotFound(error)) {
         return c.html(
@@ -54,7 +62,7 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
         500,
       )
     }
-  })
+  }
 
   return app
 }

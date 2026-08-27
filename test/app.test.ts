@@ -4,6 +4,7 @@ import { describe, it } from 'vite-plus/test'
 
 import { createPreviewApp } from '../src/app.js'
 import { typesetCss } from '../src/typesetting/typeset.css.js'
+import { webCss } from '../src/typesetting/web.css.js'
 
 describe('preview app', () => {
   it('returns ok from /health', async () => {
@@ -23,6 +24,15 @@ describe('preview app', () => {
     assert.equal(await res.text(), typesetCss)
   })
 
+  it('serves web article css', async () => {
+    const app = createPreviewApp({ source: './content/index.md' })
+    const res = await app.request('/assets/web.css')
+    assert.equal(res.status, 200)
+    assert.equal(res.headers.get('Content-Type'), 'text/css; charset=utf-8')
+    assert.equal(res.headers.get('Cache-Control'), 'no-store')
+    assert.equal(await res.text(), webCss)
+  })
+
   it('renders markdown from disk', async () => {
     const app = createPreviewApp({ source: './content/index.md' })
     const res = await app.request('/')
@@ -32,6 +42,24 @@ describe('preview app', () => {
     const html = await res.text()
     assert.match(html, /^<!DOCTYPE html>/)
     assert.match(html, /<article class="typeset">/)
+    assert.match(html, /aria-label="表示モード"/)
+    assert.match(html, /href="web.html"/)
+  })
+
+  it('renders the web article view', async () => {
+    const app = createPreviewApp({ source: './content/index.md' })
+    const webHtml = await app.request('/web.html')
+    const webAlias = await app.request('/web')
+    assert.equal(webHtml.status, 200)
+    assert.equal(webAlias.status, 200)
+    assert.equal(webHtml.headers.get('Content-Type'), 'text/html; charset=utf-8')
+    const html = await webHtml.text()
+    const alias = await webAlias.text()
+    assert.equal(html, alias)
+    assert.match(html, /<body class="web">/)
+    assert.match(html, /<article class="article">/)
+    assert.match(html, /href="assets\/web.css"/)
+    assert.match(html, /aria-current="page">Web</)
   })
 
   it('returns 404 when the manuscript is missing', async () => {
