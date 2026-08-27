@@ -45,5 +45,5 @@ Every pull request runs:
 - `vp test --coverage` (Vitest, 95% thresholds on `src/**`)
 - Semgrep (`p/javascript`, `p/typescript`, `p/nodejs`, `p/security-audit`, `p/github-actions`, plus `.semgrep/`)
 - Gitleaks
-- `bun audit`
+- `vp pm audit`（`bun audit`）
 - `actionlint` and `zizmor` (pedantic) on workflows
