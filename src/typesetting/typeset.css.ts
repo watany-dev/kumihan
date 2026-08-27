@@ -155,6 +155,8 @@ body {
   right: 16px;
   z-index: 10;
   display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   overflow: hidden;
   border: 1px solid #c8c2b6;
   border-radius: 999px;
@@ -171,7 +173,7 @@ body {
 
 .mode-switch-link {
   display: inline-block;
-  padding: 0.45em 1.1em;
+  padding: 0.45em 0.9em;
   color: #444444;
   text-decoration: none;
 }

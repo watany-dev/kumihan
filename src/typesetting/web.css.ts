@@ -63,6 +63,8 @@ body.web {
 
 .mode-switch {
   display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   overflow: hidden;
   border: 1px solid #dddddd;
   border-radius: 999px;
@@ -72,7 +74,7 @@ body.web {
 
 .mode-switch-link {
   display: inline-block;
-  padding: 0.4em 1.05em;
+  padding: 0.4em 0.85em;
   color: #444444;
   background: #ffffff;
   text-decoration: none;
