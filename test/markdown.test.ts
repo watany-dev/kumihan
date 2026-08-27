@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { describe, it } from 'node:test'
+import { describe, it } from 'vite-plus/test'
 import { renderMarkdown } from '../src/markdown/render.js'
 
 describe('renderMarkdown', () => {
@@ -32,57 +32,36 @@ describe('renderMarkdown', () => {
   })
 
   it('does not interpret markdown inside inline code', () => {
-    assert.equal(
-      renderMarkdown('`**not bold**`'),
-      '<p><code>**not bold**</code></p>',
-    )
+    assert.equal(renderMarkdown('`**not bold**`'), '<p><code>**not bold**</code></p>')
   })
 
   it('renders a fenced code block', () => {
     const source = ['```ts', 'const value = 1', '```'].join('\n')
-    assert.equal(
-      renderMarkdown(source),
-      '<pre><code>const value = 1</code></pre>',
-    )
+    assert.equal(renderMarkdown(source), '<pre><code>const value = 1</code></pre>')
   })
 
   it('preserves whitespace in a code block', () => {
     const source = ['```', 'line one', '  indented', '```'].join('\n')
-    assert.equal(
-      renderMarkdown(source),
-      '<pre><code>line one\n  indented</code></pre>',
-    )
+    assert.equal(renderMarkdown(source), '<pre><code>line one\n  indented</code></pre>')
   })
 
   it('does not interpret markdown inside a code block', () => {
     const source = ['```', '# not a heading', '**not bold**', '```'].join('\n')
-    assert.equal(
-      renderMarkdown(source),
-      '<pre><code># not a heading\n**not bold**</code></pre>',
-    )
+    assert.equal(renderMarkdown(source), '<pre><code># not a heading\n**not bold**</code></pre>')
   })
 
   it('renders a blockquote', () => {
-    assert.equal(
-      renderMarkdown('> quoted text'),
-      '<blockquote>\n<p>quoted text</p>\n</blockquote>',
-    )
+    assert.equal(renderMarkdown('> quoted text'), '<blockquote>\n<p>quoted text</p>\n</blockquote>')
   })
 
   it('renders an unordered list', () => {
     const source = ['- unordered', '- list'].join('\n')
-    assert.equal(
-      renderMarkdown(source),
-      '<ul>\n<li>unordered</li>\n<li>list</li>\n</ul>',
-    )
+    assert.equal(renderMarkdown(source), '<ul>\n<li>unordered</li>\n<li>list</li>\n</ul>')
   })
 
   it('renders an ordered list', () => {
     const source = ['1. ordered', '2. list'].join('\n')
-    assert.equal(
-      renderMarkdown(source),
-      '<ol>\n<li>ordered</li>\n<li>list</li>\n</ol>',
-    )
+    assert.equal(renderMarkdown(source), '<ol>\n<li>ordered</li>\n<li>list</li>\n</ol>')
   })
 
   it('renders a link', () => {
@@ -93,17 +72,11 @@ describe('renderMarkdown', () => {
   })
 
   it('renders a relative link', () => {
-    assert.equal(
-      renderMarkdown('[local](./page.html)'),
-      '<p><a href="./page.html">local</a></p>',
-    )
+    assert.equal(renderMarkdown('[local](./page.html)'), '<p><a href="./page.html">local</a></p>')
   })
 
   it('renders a fragment link', () => {
-    assert.equal(
-      renderMarkdown('[section](#heading)'),
-      '<p><a href="#heading">section</a></p>',
-    )
+    assert.equal(renderMarkdown('[section](#heading)'), '<p><a href="#heading">section</a></p>')
   })
 
   it('renders a mailto link', () => {
@@ -118,10 +91,7 @@ describe('renderMarkdown', () => {
   })
 
   it('renders inline markup inside a heading', () => {
-    assert.equal(
-      renderMarkdown('# Use **bold**'),
-      '<h1>Use <strong>bold</strong></h1>',
-    )
+    assert.equal(renderMarkdown('# Use **bold**'), '<h1>Use <strong>bold</strong></h1>')
   })
 
   it('keeps adjacent blocks separate', () => {

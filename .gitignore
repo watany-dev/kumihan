@@ -1,5 +1,8 @@
 node_modules/
 dist/
 build/
-.DS_Store
+coverage/
+.vite/
+.vp/
 *.log
+.DS_Store

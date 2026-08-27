@@ -4,6 +4,8 @@ GitHub Codespaces 上で Markdown 原稿を編集し、Hono が組版済み HTML
 
 個人または小規模な執筆・組版作業を対象にした v0.1 です。VS Code Extension、CMS、データベース、独自デプロイ基盤は含みません。
 
+ツールチェーンは [Vite+](https://viteplus.dev/)（`vp`）と [Bun](https://bun.sh/) です。CI は GitHub Actions で、`actionlint` と `zizmor` がワークフローを検査します。
+
 ```
 VS Code
   │
@@ -25,39 +27,51 @@ Browser       dist/index.html
 
 ## 使い方
 
+前提:
+
+```bash
+# Vite+（vp）
+curl -fsSL https://vite.plus | bash
+
+# Bun 1.4.0（vp が packageManager から入れる場合もあります）
+curl -fsSL https://bun.sh/install | bash
+```
+
 ### GitHub Codespaces
 
 1. このリポジトリを Codespaces で開く
-2. Dev Container が Node.js を用意し、`npm install` を実行する
-3. ターミナルで `npm run dev` を実行する
+2. Dev Container が Bun と Vite+ を用意し、`vp install --frozen-lockfile` を実行する
+3. ターミナルで `bun run dev` を実行する
 4. Forwarded Port `3000`（Typeset Preview）をブラウザで開く
 5. `content/index.md` を編集して保存し、ブラウザを再読み込みする
 
 ### ローカル
 
 ```bash
-npm install
-npm run dev
+vp install
+bun run dev
 ```
 
 http://127.0.0.1:3000 を開きます。
 
-## npm scripts
+## コマンド
 
-| コマンド | 内容 |
-| --- | --- |
-| `npm run dev` | Preview server を起動する |
-| `npm run build` | TypeScript をビルドする |
-| `npm run export` | `dist/index.html` と CSS を生成する |
-| `npm test` | parser / renderer のテストを実行する |
+| コマンド         | 内容                                |
+| ---------------- | ----------------------------------- |
+| `bun run dev`    | Preview server を起動する           |
+| `vp check`       | フォーマット・lint・型チェック      |
+| `vp test`        | parser / renderer / HTTP のテスト   |
+| `bun run export` | `dist/index.html` と CSS を生成する |
+
+`vp fmt` / `vp lint` で個別にも実行できます。
 
 ## HTTP
 
-| 経路 | 内容 |
-| --- | --- |
-| `GET /` | `content/index.md` を読み、組版 HTML を返す |
-| `GET /health` | `{ "ok": true }` |
-| `GET /assets/typeset.css` | 組版 CSS |
+| 経路                      | 内容                                        |
+| ------------------------- | ------------------------------------------- |
+| `GET /`                   | `content/index.md` を読み、組版 HTML を返す |
+| `GET /health`             | `{ "ok": true }`                            |
+| `GET /assets/typeset.css` | 組版 CSS                                    |
 
 `GET /` は毎回ファイルを読み直し、`Cache-Control: no-store` で返します。v0.1 の live reload はブラウザの手動更新です。
 
@@ -95,7 +109,7 @@ Web 側に editor textarea はありません。編集は VS Code で行いま�
 Preview と公開版は同じ `renderMarkdown()` / `renderDocument()` を使います。
 
 ```bash
-npm run export
+bun run export
 ```
 
 生成物:
@@ -107,7 +121,9 @@ dist/
    └─ typeset.css
 ```
 
-`main` への push で GitHub Actions が `npm ci` → `npm run export` → GitHub Pages へ deploy します。リポジトリの Pages 設定は **GitHub Actions** を選んでください。
+`main` への push で GitHub Actions が `vp install --frozen-lockfile` → `vp test` → `vp run export` → GitHub Pages へ deploy します。リポジトリの Pages 設定は **GitHub Actions** を選んでください。
+
+CI ではこれに加えて `vp check`、`actionlint`、`zizmor` を実行します。GitHub Actions はコミット SHA にピン留めし、Dependabot が週次で更新します。
 
 ## Public API
 

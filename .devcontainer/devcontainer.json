@@ -1,6 +1,11 @@
 {
   "name": "Typesetter",
   "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
+  "features": {
+    "ghcr.io/oven-sh/devcontainer-features/bun:1": {
+      "version": "1.4.0"
+    }
+  },
   "forwardPorts": [3000],
   "portsAttributes": {
     "3000": {
@@ -8,5 +13,5 @@
       "onAutoForward": "openBrowser"
     }
   },
-  "postCreateCommand": "npm install"
+  "postCreateCommand": "curl -fsSL https://vite.plus | bash && export PATH=\"$HOME/.local/share/vite-plus/bin:$PATH\" && vp install --frozen-lockfile"
 }

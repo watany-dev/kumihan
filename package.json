@@ -4,17 +4,29 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx src/server.ts",
-    "build": "tsc",
-    "export": "tsx scripts/export.ts",
-    "test": "tsx --test test/*.test.ts"
+    "dev": "bun src/server.ts",
+    "export": "bun scripts/export.ts"
   },
   "dependencies": {
-    "hono": "^4"
+    "hono": "4.13.5"
   },
   "devDependencies": {
-    "@types/node": "^22",
-    "tsx": "^4",
-    "typescript": "^5"
-  }
+    "@types/node": "22.19.21",
+    "vite-plus": "0.3.0"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "bun",
+      "version": "1.4.0",
+      "onFail": "download"
+    },
+    "runtime": {
+      "name": "node",
+      "version": ">=22"
+    }
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "bun@1.4.0"
 }

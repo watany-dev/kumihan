@@ -80,10 +80,7 @@ function isHorizontalRule(line: string): boolean {
   return /^-{3,}$/.test(line.trim())
 }
 
-function parseFencedCode(
-  lines: string[],
-  start: number,
-): { html: string; next: number } {
+function parseFencedCode(lines: string[], start: number): { html: string; next: number } {
   const body: string[] = []
   let i = start + 1
 
@@ -102,10 +99,7 @@ function parseFencedCode(
   }
 }
 
-function parseBlockquote(
-  lines: string[],
-  start: number,
-): { html: string; next: number } {
+function parseBlockquote(lines: string[], start: number): { html: string; next: number } {
   const inner: string[] = []
   let i = start
 
@@ -146,18 +140,11 @@ function parseList(
   }
 }
 
-function parseParagraph(
-  lines: string[],
-  start: number,
-): { html: string; next: number } {
+function parseParagraph(lines: string[], start: number): { html: string; next: number } {
   const collected: string[] = []
   let i = start
 
-  while (
-    i < lines.length &&
-    (lines[i] ?? '').trim() !== '' &&
-    !isBlockStart(lines[i] ?? '')
-  ) {
+  while (i < lines.length && (lines[i] ?? '').trim() !== '' && !isBlockStart(lines[i] ?? '')) {
     collected.push(lines[i] ?? '')
     i += 1
   }

@@ -7,10 +7,7 @@ export interface StaticAsset {
   response: Response
 }
 
-export function exportSite(
-  markdown: string,
-  options?: RenderDocumentOptions,
-): StaticAsset[] {
+export function exportSite(markdown: string, options?: RenderDocumentOptions): StaticAsset[] {
   const html = renderDocument(renderMarkdown(markdown), options)
 
   return [

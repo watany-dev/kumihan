@@ -5,10 +5,7 @@ export interface RenderDocumentOptions {
   language?: string
 }
 
-export function renderDocument(
-  html: string,
-  options?: RenderDocumentOptions,
-): string {
+export function renderDocument(html: string, options?: RenderDocumentOptions): string {
   const title = escapeHtml(options?.title ?? 'Typeset Preview')
   const language = escapeHtml(options?.language ?? 'ja')
 
