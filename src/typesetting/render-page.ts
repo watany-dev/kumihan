@@ -1,7 +1,7 @@
 import { escapeHtml } from '../markdown/escape.js'
 import { documentSecurityMeta } from '../security/headers.js'
 
-export type PreviewMode = 'print' | 'web'
+export type PreviewMode = 'print' | 'magazine' | 'web'
 
 export interface RenderDocumentOptions {
   title?: string
@@ -12,7 +12,8 @@ export interface RenderDocumentOptions {
 export function renderDocument(html: string, options?: RenderDocumentOptions): string {
   const title = escapeHtml(options?.title ?? 'Typeset Preview')
   const language = escapeHtml(options?.language ?? 'ja')
-  const mode: PreviewMode = options?.mode === 'web' ? 'web' : 'print'
+  const mode: PreviewMode =
+    options?.mode === 'web' || options?.mode === 'magazine' ? options.mode : 'print'
   const stylesheet = mode === 'web' ? 'assets/web.css' : 'assets/typeset.css'
   const viewport =
     mode === 'web' ? '  <meta name="viewport" content="width=device-width, initial-scale=1">\n' : ''
@@ -47,10 +48,11 @@ ${html}
 </body>`
   }
 
+  const cols = mode === 'magazine' ? ' cols-2' : ''
   return `<body>
   ${modeSwitcher(mode)}
   <div class="paper">
-    <article class="typeset">
+    <article class="typeset${cols}">
 ${html}
     </article>
   </div>
@@ -59,10 +61,12 @@ ${html}
 
 function modeSwitcher(mode: PreviewMode): string {
   const printActive = mode === 'print'
+  const magazineActive = mode === 'magazine'
   const webActive = mode === 'web'
 
   return `<nav class="mode-switch" aria-label="表示モード">
     <a class="mode-switch-link${printActive ? ' is-active' : ''}" href="./"${printActive ? ' aria-current="page"' : ''}>組版</a>
+    <a class="mode-switch-link${magazineActive ? ' is-active' : ''}" href="magazine.html"${magazineActive ? ' aria-current="page"' : ''}>2段</a>
     <a class="mode-switch-link${webActive ? ' is-active' : ''}" href="web.html"${webActive ? ' aria-current="page"' : ''}>Web</a>
   </nav>`
 }

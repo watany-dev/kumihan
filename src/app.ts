@@ -36,6 +36,8 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
   app.get('/assets/web.css', (c) => c.body(webCss, 200, CSS_HEADERS))
 
   app.get('/', (c) => serveManuscript(c, 'print'))
+  app.get('/magazine.html', (c) => serveManuscript(c, 'magazine'))
+  app.get('/magazine', (c) => serveManuscript(c, 'magazine'))
   app.get('/web.html', (c) => serveManuscript(c, 'web'))
   app.get('/web', (c) => serveManuscript(c, 'web'))
 

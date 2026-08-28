@@ -11,12 +11,21 @@ export interface StaticAsset {
 export function exportSite(markdown: string, options?: RenderDocumentOptions): StaticAsset[] {
   const fragment = renderMarkdown(markdown)
   const printHtml = renderDocument(fragment, { ...options, mode: 'print' })
+  const magazineHtml = renderDocument(fragment, { ...options, mode: 'magazine' })
   const webHtml = renderDocument(fragment, { ...options, mode: 'web' })
 
   return [
     {
       pathname: '/index.html',
       response: new Response(printHtml, {
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+        },
+      }),
+    },
+    {
+      pathname: '/magazine.html',
+      response: new Response(magazineHtml, {
         headers: {
           'Content-Type': 'text/html; charset=utf-8',
         },

@@ -25,6 +25,7 @@ describe('renderDocument', () => {
     assert.match(html, /href="assets\/typeset.css"/)
     assert.match(html, /aria-label="表示モード"/)
     assert.match(html, /aria-current="page">組版</)
+    assert.match(html, /href="magazine.html"/)
     assert.match(html, /href="web.html"/)
     assert.match(html, /<\/html>\s*$/)
   })
@@ -49,7 +50,20 @@ describe('renderDocument', () => {
     assert.match(html, /href="assets\/web.css"/)
     assert.match(html, /aria-current="page">Web</)
     assert.match(html, /href="\.\/"/)
+    assert.match(html, /href="magazine.html"/)
     assert.match(html, /<\/html>\s*$/)
+  })
+
+  it('generates a two-column print document', () => {
+    const html = renderDocument(renderMarkdown('# 見出し\n\n導入です。'), {
+      title: '2段',
+      mode: 'magazine',
+    })
+
+    assert.match(html, /<article class="typeset cols-2">/)
+    assert.match(html, /href="assets\/typeset.css"/)
+    assert.match(html, /aria-current="page">2段</)
+    assert.equal(html.includes('name="viewport"'), false)
   })
 
   it('uses default title, language, and print mode', () => {
@@ -64,6 +78,7 @@ describe('renderDocument', () => {
     const html = renderDocument('<p>ok</p>', { mode: 'print' })
     assert.match(html, /<div class="paper">/)
     assert.match(html, /href="assets\/typeset.css"/)
+    assert.equal(html.includes('cols-2'), false)
   })
 
   it('escapes document title', () => {

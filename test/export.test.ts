@@ -18,21 +18,30 @@ const sample = `# 見出し
 `
 
 describe('exportSite', () => {
-  it('emits print and web html with matching stylesheets', async () => {
+  it('emits print, magazine, and web html with matching stylesheets', async () => {
     const assets = exportSite(sample)
     const paths = assets.map((asset) => asset.pathname)
-    assert.deepEqual(paths, ['/index.html', '/web.html', '/assets/typeset.css', '/assets/web.css'])
+    assert.deepEqual(paths, [
+      '/index.html',
+      '/magazine.html',
+      '/web.html',
+      '/assets/typeset.css',
+      '/assets/web.css',
+    ])
 
     const index = assets[0]
-    const web = assets[1]
-    const css = assets[2]
-    const webStyles = assets[3]
+    const magazine = assets[1]
+    const web = assets[2]
+    const css = assets[3]
+    const webStyles = assets[4]
     assert.ok(index)
+    assert.ok(magazine)
     assert.ok(web)
     assert.ok(css)
     assert.ok(webStyles)
 
     assert.equal(index.response.headers.get('Content-Type'), 'text/html; charset=utf-8')
+    assert.equal(magazine.response.headers.get('Content-Type'), 'text/html; charset=utf-8')
     assert.equal(web.response.headers.get('Content-Type'), 'text/html; charset=utf-8')
     assert.equal(css.response.headers.get('Content-Type'), 'text/css; charset=utf-8')
     assert.equal(webStyles.response.headers.get('Content-Type'), 'text/css; charset=utf-8')
@@ -41,15 +50,19 @@ describe('exportSite', () => {
   })
 
   it('uses the same renderer as preview', async () => {
-    const preview = renderDocument(renderMarkdown(sample))
-    const webPreview = renderDocument(renderMarkdown(sample), { mode: 'web' })
+    const fragment = renderMarkdown(sample)
     const assets = exportSite(sample)
-    const index = assets.find((asset) => asset.pathname === '/index.html')
-    const web = assets.find((asset) => asset.pathname === '/web.html')
-    assert.ok(index)
-    assert.ok(web)
-    assert.equal(await index.response.text(), preview)
-    assert.equal(await web.response.text(), webPreview)
+    const expected = {
+      '/index.html': renderDocument(fragment),
+      '/magazine.html': renderDocument(fragment, { mode: 'magazine' }),
+      '/web.html': renderDocument(fragment, { mode: 'web' }),
+    } as const
+
+    for (const [pathname, preview] of Object.entries(expected)) {
+      const asset = assets.find((item) => item.pathname === pathname)
+      assert.ok(asset)
+      assert.equal(await asset.response.text(), preview)
+    }
   })
 
   it('forwards document options into the exported HTML', async () => {
@@ -59,6 +72,11 @@ describe('exportSite', () => {
     const html = await index.response.text()
     assert.match(html, /<html lang="en">/)
     assert.match(html, /<title>Exported<\/title>/)
+    const magazine = assets.find((asset) => asset.pathname === '/magazine.html')
+    assert.ok(magazine)
+    const magazineHtml = await magazine.response.text()
+    assert.match(magazineHtml, /<html lang="en">/)
+    assert.match(magazineHtml, /<article class="typeset cols-2">/)
     const web = assets.find((asset) => asset.pathname === '/web.html')
     assert.ok(web)
     const webHtml = await web.response.text()
@@ -67,13 +85,16 @@ describe('exportSite', () => {
     assert.match(webHtml, /<body class="web">/)
   })
 
-  it('always emits both modes even if a mode option is passed', async () => {
+  it('always emits every mode even if a mode option is passed', async () => {
     const assets = exportSite('# Title', { mode: 'web' })
     const index = assets.find((asset) => asset.pathname === '/index.html')
+    const magazine = assets.find((asset) => asset.pathname === '/magazine.html')
     const web = assets.find((asset) => asset.pathname === '/web.html')
     assert.ok(index)
+    assert.ok(magazine)
     assert.ok(web)
-    assert.match(await index.response.text(), /<div class="paper">/)
+    assert.match(await index.response.text(), /<article class="typeset">/)
+    assert.match(await magazine.response.text(), /<article class="typeset cols-2">/)
     assert.match(await web.response.text(), /<body class="web">/)
   })
 })

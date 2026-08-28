@@ -149,12 +149,29 @@ body {
   font-size: inherit;
 }
 
+.typeset.cols-2 {
+  column-count: 2;
+  column-gap: 8mm;
+  column-rule: 0.3pt solid #d0cdc6;
+  font-size: 9.5pt;
+  line-height: 1.75;
+}
+
+.typeset.cols-2 h1,
+.typeset.cols-2 h1 + p,
+.typeset.cols-2 pre,
+.typeset.cols-2 hr {
+  column-span: all;
+}
+
 .mode-switch {
   position: fixed;
   top: 12px;
   right: 16px;
   z-index: 10;
   display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   overflow: hidden;
   border: 1px solid #c8c2b6;
   border-radius: 999px;
@@ -171,7 +188,7 @@ body {
 
 .mode-switch-link {
   display: inline-block;
-  padding: 0.45em 1.1em;
+  padding: 0.45em 0.9em;
   color: #444444;
   text-decoration: none;
 }
