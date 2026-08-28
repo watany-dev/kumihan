@@ -4,7 +4,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { describe, it } from 'vite-plus/test'
 
 import { createPreviewApp } from '../src/app.js'
-import { createNodeServer, dispatchNodeRequest } from '../src/node-server.js'
+import { createNodeServer, dispatchNodeRequest, safeHost } from '../src/node-server.js'
 import { DOCUMENT_CONTENT_SECURITY_POLICY } from '../src/security/headers.js'
 
 function assertSecurityHeaders(headers: Headers): void {
@@ -171,5 +171,41 @@ describe('node http adapter', () => {
         assert.equal(await res.text(), 'Internal Server Error')
       },
     )
+  })
+})
+
+describe('Host header validation', () => {
+  it('keeps a plain host, with or without a port', () => {
+    assert.equal(safeHost('127.0.0.1:3000'), '127.0.0.1:3000')
+    assert.equal(safeHost('localhost'), 'localhost')
+    assert.equal(safeHost('kumihan.example.com:8080'), 'kumihan.example.com:8080')
+    assert.equal(safeHost('[::1]:3000'), '[::1]:3000')
+  })
+
+  it('falls back when the header could rewrite the request URL', () => {
+    assert.equal(safeHost('evil.example.com/assets/web.css?'), '127.0.0.1')
+    assert.equal(safeHost('user@evil.example.com'), '127.0.0.1')
+    assert.equal(safeHost('example.com#'), '127.0.0.1')
+    assert.equal(safeHost(''), '127.0.0.1')
+    assert.equal(safeHost(undefined), '127.0.0.1')
+    assert.equal(safeHost(`${'a'.repeat(256)}.example.com`), '127.0.0.1')
+  })
+
+  it('does not let the Host header change the routed path', async () => {
+    let seen = ''
+    await withServer(
+      (req, res) => {
+        req.headers.host = 'evil.example.com/magazine.html?'
+        void dispatchNodeRequest(req, res, async (request) => {
+          seen = new URL(request.url).pathname
+          return new Response('ok')
+        })
+      },
+      async (port) => {
+        const res = await fetch(`http://127.0.0.1:${port}/health`)
+        await res.text()
+      },
+    )
+    assert.equal(seen, '/health')
   })
 })
