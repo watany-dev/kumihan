@@ -3,6 +3,16 @@ import { renderInline } from './inline.js'
 
 const HARD_BREAK = '\u0001'
 
+// HARD_BREAK は段落の強制改行を表す内部の目印です。原稿に同じ文字が
+// 紛れていると escapeHtml をすり抜けて生の <br> になってしまうので、
+// 目印として使う前に入力から取り除きます。
+function stripHardBreakSentinel(text: string): string {
+  if (!text.includes(HARD_BREAK)) {
+    return text
+  }
+  return text.replaceAll(HARD_BREAK, '')
+}
+
 function lineAt(lines: readonly string[], index: number): string {
   const line = lines[index]
   if (typeof line === 'string') {
@@ -12,8 +22,13 @@ function lineAt(lines: readonly string[], index: number): string {
   return ''
 }
 
-export function renderMarkdown(source: string): string {
-  const lines = source.replace(/\r\n?/g, '\n').split('\n')
+// 引用は入れ子にできるため renderMarkdown は自分を再帰呼び出しします。
+// `>` を並べただけの原稿でスタックを溢れさせないよう、深さを制限します。
+// これを超えた引用の中身は、記法を解釈せず段落として出します。
+const MAX_BLOCKQUOTE_DEPTH = 32
+
+export function renderMarkdown(source: string, depth = 0): string {
+  const lines = stripHardBreakSentinel(source.replace(/\r\n?/g, '\n')).split('\n')
   const blocks: string[] = []
   let i = 0
 
@@ -45,8 +60,8 @@ export function renderMarkdown(source: string): string {
       continue
     }
 
-    if (line.startsWith('>')) {
-      const parsed = parseBlockquote(lines, i)
+    if (line.startsWith('>') && depth < MAX_BLOCKQUOTE_DEPTH) {
+      const parsed = parseBlockquote(lines, i, depth)
       blocks.push(parsed.html)
       i = parsed.next
       continue
@@ -66,7 +81,7 @@ export function renderMarkdown(source: string): string {
       continue
     }
 
-    const parsed = parseParagraph(lines, i)
+    const parsed = parseParagraph(lines, i, depth)
     blocks.push(parsed.html)
     i = parsed.next
   }
@@ -124,7 +139,11 @@ function parseFencedCode(lines: string[], start: number): { html: string; next: 
   }
 }
 
-function parseBlockquote(lines: string[], start: number): { html: string; next: number } {
+function parseBlockquote(
+  lines: string[],
+  start: number,
+  depth: number,
+): { html: string; next: number } {
   const inner: string[] = []
   let i = start
 
@@ -141,7 +160,7 @@ function parseBlockquote(lines: string[], start: number): { html: string; next: 
     i += 1
   }
 
-  const innerHtml = renderMarkdown(inner.join('\n'))
+  const innerHtml = renderMarkdown(inner.join('\n'), depth + 1)
   return {
     html: `<blockquote>\n${innerHtml}\n</blockquote>`,
     next: i,
@@ -172,13 +191,17 @@ function parseList(
   }
 }
 
-function parseParagraph(lines: string[], start: number): { html: string; next: number } {
+function parseParagraph(
+  lines: string[],
+  start: number,
+  depth: number,
+): { html: string; next: number } {
   const collected: string[] = []
   let i = start
 
   while (i < lines.length) {
     const line = lineAt(lines, i)
-    if (isBlank(line) || isBlockStart(line)) {
+    if (isBlank(line) || isBlockStart(line, depth)) {
       break
     }
     collected.push(line)
@@ -206,12 +229,12 @@ function parseParagraph(lines: string[], start: number): { html: string; next: n
 // 段落の大半はこの 1 回の判定だけで抜けられます。
 const BLOCK_START_HEAD = /^[`#\->\d\s]/
 
-function isBlockStart(line: string): boolean {
+function isBlockStart(line: string, depth: number): boolean {
   if (!BLOCK_START_HEAD.test(line)) return false
   if (line.startsWith('```')) return true
   if (HEADING.test(line)) return true
   if (isHorizontalRule(line)) return true
-  if (line.startsWith('>')) return true
+  if (line.startsWith('>')) return depth < MAX_BLOCKQUOTE_DEPTH
   if (line.startsWith('- ')) return true
   if (/^\d+\. /.test(line)) return true
   return false
