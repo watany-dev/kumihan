@@ -1,17 +1,6 @@
 import { escapeHtml } from './escape.js'
+import { HARD_BREAK, stripHardBreakSentinel } from './hard-break.js'
 import { renderInline } from './inline.js'
-
-const HARD_BREAK = '\u0001'
-
-// HARD_BREAK は段落の強制改行を表す内部の目印です。原稿に同じ文字が
-// 紛れていると escapeHtml をすり抜けて生の <br> になってしまうので、
-// 目印として使う前に入力から取り除きます。
-function stripHardBreakSentinel(text: string): string {
-  if (!text.includes(HARD_BREAK)) {
-    return text
-  }
-  return text.replaceAll(HARD_BREAK, '')
-}
 
 function lineAt(lines: readonly string[], index: number): string {
   const line = lines[index]
@@ -218,7 +207,9 @@ function parseParagraph(
   /* v8 ignore stop */
 
   const joined = joinParagraphLines(collected)
-  const html = renderInline(joined).replaceAll(HARD_BREAK, '<br>')
+  // 目印を <br> にするのは renderInline の地の文だけです。ここでまとめて
+  // 置き換えると、コードスパンの中身にまで <br> が入り込みます。
+  const html = renderInline(joined)
   return {
     html: `<p>${html}</p>`,
     next: i,

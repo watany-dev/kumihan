@@ -1,4 +1,5 @@
 import { escapeHtml, sanitizeUrl } from './escape.js'
+import { HARD_BREAK } from './hard-break.js'
 
 const BACKTICK = 0x60
 const BRACKET_OPEN = 0x5b
@@ -18,21 +19,44 @@ function nextMarkerIndex(source: string, from: number): number {
   return source.length
 }
 
+/**
+ * 閉じ記号が「これ以降には存在しない」位置。閉じ記号を探す indexOf は
+ * 見つからないと末尾まで走るので、閉じられない記号が並んだ原稿
+ * （`[[[[…`）では 1 文字ごとに全体を走査して二乗時間になります。
+ * 最後の出現位置を一度だけ求めておき、その先では探索を省きます。
+ */
+interface CloserLimits {
+  backtick: number
+  double: number
+  asterisk: number
+  linkMid: number
+}
+
+function closerLimits(source: string): CloserLimits {
+  return {
+    backtick: source.lastIndexOf('`'),
+    double: source.lastIndexOf('**'),
+    asterisk: source.lastIndexOf('*'),
+    linkMid: source.lastIndexOf(']('),
+  }
+}
+
 export function renderInline(source: string): string {
+  const limits = closerLimits(source)
   let i = 0
   let html = ''
 
   while (i < source.length) {
     const marker = nextMarkerIndex(source, i)
     if (marker > i) {
-      html += escapeHtml(source.slice(i, marker))
+      html += renderText(source.slice(i, marker))
       i = marker
       if (i === source.length) break
     }
 
     // ここに来る文字は必ず `\``・`[`・`*` のいずれかなので、
     // 対応する記法だけを試します。
-    const parsed = parseMarker(source, i)
+    const parsed = parseMarker(source, i, limits)
     if (parsed) {
       html += parsed.html
       i = parsed.end
@@ -46,16 +70,28 @@ export function renderInline(source: string): string {
   return html
 }
 
-function parseMarker(source: string, start: number): { html: string; end: number } | null {
+// 地の文だけが強制改行の目印を <br> にできます。コードスパンや URL の
+// 中身は文字どおりに扱うので、ここを通らずに別の処理へ回します。
+function renderText(text: string): string {
+  const escaped = escapeHtml(text)
+  return escaped.includes(HARD_BREAK) ? escaped.replaceAll(HARD_BREAK, '<br>') : escaped
+}
+
+function parseMarker(
+  source: string,
+  start: number,
+  limits: CloserLimits,
+): { html: string; end: number } | null {
   const marker = source.charCodeAt(start)
 
   if (marker === BACKTICK) {
-    const code = parseDelimited(source, start, '`')
-    return code ? { html: `<code>${escapeHtml(code.text)}</code>`, end: code.end } : null
+    const code = start < limits.backtick ? parseDelimited(source, start, '`') : null
+    // コードスパンの中身は文字どおり。改行だった場所は空白に戻します。
+    return code ? { html: `<code>${escapeHtml(literal(code.text))}</code>`, end: code.end } : null
   }
 
   if (marker === BRACKET_OPEN) {
-    const link = parseLink(source, start)
+    const link = start < limits.linkMid ? parseLink(source, start) : null
     if (!link) return null
     return {
       html: `<a href="${escapeHtml(sanitizeUrl(link.url))}">${renderInline(link.text)}</a>`,
@@ -63,21 +99,29 @@ function parseMarker(source: string, start: number): { html: string; end: number
     }
   }
 
-  const strong = parseDelimited(source, start, '**')
+  const strong = start + 2 <= limits.double ? parseDelimited(source, start, '**') : null
   if (strong) {
     return { html: `<strong>${renderInline(strong.text)}</strong>`, end: strong.end }
   }
 
-  const emphasis = parseDelimited(source, start, '*')
+  const emphasis = start < limits.asterisk ? parseDelimited(source, start, '*') : null
   return emphasis ? { html: `<em>${renderInline(emphasis.text)}</em>`, end: emphasis.end } : null
 }
 
-/** 呼び出し元は `source[start]` が `[` であることを保証します。 */
+function literal(text: string): string {
+  return text.includes(HARD_BREAK) ? text.replaceAll(HARD_BREAK, ' ') : text
+}
+
+/**
+ * 呼び出し元は `source[start]` が `[` であること、および `](` が
+ * この先に残っていること（CloserLimits）を保証します。
+ */
 function parseLink(
   source: string,
   start: number,
 ): { text: string; url: string; end: number } | null {
   const mid = source.indexOf('](', start + 1)
+  /* v8 ignore next -- 呼び出し元が `](` の存在を確かめている */
   if (mid === -1) return null
   const end = source.indexOf(')', mid + 2)
   if (end === -1) return null
