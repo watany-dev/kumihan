@@ -1,10 +1,21 @@
+const ESCAPES: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+}
+
+const ESCAPABLE = /["&'<>]/
+const ESCAPABLE_GLOBAL = /["&'<>]/g
+
 export function escapeHtml(text: string): string {
-  return text
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;')
+  if (!ESCAPABLE.test(text)) {
+    return text
+  }
+
+  /* v8 ignore next -- the character class only matches keys of ESCAPES */
+  return text.replace(ESCAPABLE_GLOBAL, (character) => ESCAPES[character] ?? character)
 }
 
 function hasC0Control(text: string): boolean {

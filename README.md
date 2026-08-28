@@ -56,6 +56,19 @@ bun run dev
 
 http://127.0.0.1:3000 を開きます。
 
+### ベンチマーク
+
+組版パイプラインの処理時間を計測します。
+
+```bash
+bun run bench                          # 既定は 50 回 × 40 倍の原稿
+bun run bench -- --iterations 300 --scale 100
+```
+
+`content/index.md` を `--scale` 倍に増幅した原稿を使い、`escapeHtml` /
+`renderInline` / `renderMarkdown` / `renderDocument` の中央値・最小値・
+スループットを表示します。
+
 ### スタンドアロン実行ファイル
 
 [Releases](https://github.com/watany-dev/kumihan/releases) からバイナリを落とすか、`bun run compile` で今のマシン向けに作ります。`v*.*.*` タグで全 OS 分が Release に載ります。

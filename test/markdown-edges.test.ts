@@ -73,3 +73,26 @@ describe('markdown edge cases', () => {
     assert.equal(renderMarkdown('Ａ\nＢ'), '<p>ＡＢ</p>')
   })
 })
+
+describe('block scanning always makes progress', () => {
+  // A heading marker with no text used to satisfy the paragraph scanner's
+  // block-start check while matching no block parser, so renderMarkdown spun
+  // forever on it.
+  it('renders a bare heading marker as a paragraph', () => {
+    assert.equal(renderMarkdown('# '), '<p>#</p>')
+    assert.equal(renderMarkdown('## '), '<p>##</p>')
+    assert.equal(renderMarkdown('### '), '<p>###</p>')
+  })
+
+  it('renders a bare heading marker surrounded by real content', () => {
+    assert.equal(renderMarkdown('# Title\n\n## \n\nBody'), '<h1>Title</h1>\n<p>##</p>\n<p>Body</p>')
+  })
+
+  it('keeps a bare heading marker inside a blockquote finite', () => {
+    assert.equal(renderMarkdown('> # '), '<blockquote>\n<p>#</p>\n</blockquote>')
+  })
+
+  it('treats an indented horizontal rule as a rule', () => {
+    assert.equal(renderMarkdown('  ---  '), '<hr>')
+  })
+})

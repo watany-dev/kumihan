@@ -24,9 +24,12 @@ export const DOCUMENT_CONTENT_SECURITY_POLICY = CONTENT_SECURITY_POLICY.split(';
 
 export const REFERRER_POLICY = 'no-referrer'
 
-export function documentSecurityMeta(): string {
-  return `  <meta http-equiv="Content-Security-Policy" content="${DOCUMENT_CONTENT_SECURITY_POLICY}">
+// 内容は定数なので、リクエストごとに組み立て直さない。
+const DOCUMENT_SECURITY_META = `  <meta http-equiv="Content-Security-Policy" content="${DOCUMENT_CONTENT_SECURITY_POLICY}">
   <meta name="referrer" content="${REFERRER_POLICY}">`
+
+export function documentSecurityMeta(): string {
+  return DOCUMENT_SECURITY_META
 }
 
 export function previewSecureHeaders() {
