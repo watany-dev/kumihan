@@ -3,6 +3,16 @@ import { renderInline } from './inline.js'
 
 const HARD_BREAK = '\u0001'
 
+// HARD_BREAK は段落の強制改行を表す内部の目印です。原稿に同じ文字が
+// 紛れていると escapeHtml をすり抜けて生の <br> になってしまうので、
+// 目印として使う前に入力から取り除きます。
+function stripHardBreakSentinel(text: string): string {
+  if (!text.includes(HARD_BREAK)) {
+    return text
+  }
+  return text.replaceAll(HARD_BREAK, '')
+}
+
 function lineAt(lines: readonly string[], index: number): string {
   const line = lines[index]
   if (typeof line === 'string') {
@@ -13,7 +23,7 @@ function lineAt(lines: readonly string[], index: number): string {
 }
 
 export function renderMarkdown(source: string): string {
-  const lines = source.replace(/\r\n?/g, '\n').split('\n')
+  const lines = stripHardBreakSentinel(source.replace(/\r\n?/g, '\n')).split('\n')
   const blocks: string[] = []
   let i = 0
 

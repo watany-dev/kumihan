@@ -61,3 +61,30 @@ describe('unsafe URL rejection', () => {
     assert.match(html, /href="#"/)
   })
 })
+
+describe('control characters in the manuscript', () => {
+  const SENTINEL = String.fromCharCode(0x01)
+
+  it('does not let the hard-break sentinel become a raw <br>', () => {
+    const html = renderMarkdown(`a${SENTINEL}b`)
+    assert.equal(html.includes('<br>'), false)
+    assert.equal(html, '<p>ab</p>')
+  })
+
+  it('does not let the sentinel escape a code span', () => {
+    const html = renderMarkdown(`\`a${SENTINEL}b\``)
+    assert.equal(html.includes('<br>'), false)
+    assert.equal(html, '<p><code>ab</code></p>')
+  })
+
+  it('drops the sentinel inside a fenced code block', () => {
+    const html = renderMarkdown(['```', `a${SENTINEL}b`, '```'].join('\n'))
+    assert.equal(html.includes('<br>'), false)
+    assert.equal(html, '<pre><code>ab</code></pre>')
+  })
+
+  it('still renders a real hard break', () => {
+    const html = renderMarkdown('a  \nb')
+    assert.equal(html, '<p>a<br>b</p>')
+  })
+})
