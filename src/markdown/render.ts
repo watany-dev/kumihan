@@ -231,34 +231,39 @@ function isBlockStart(line: string, depth: number): boolean {
   return false
 }
 
+// 行の境目に空白を入れるかどうかは、直前の文字だけで決まります。
+// 連結済みの文字列から charAt で末尾を取ると、行が増えるほど文字列を
+// 実体化しなおすことになり、段落の行数に対して二乗時間になります
+// （`> 本文` を並べただけの原稿がそれです）。末尾の文字と長さを別に
+// 持ち回り、断片は最後にまとめて join します。
 function joinParagraphLines(lines: string[]): string {
-  let result = ''
-  let chunk = ''
+  const parts: string[] = []
+  let chunkLength = 0
+  let previousLast = ''
 
   for (let i = 0; i < lines.length; i += 1) {
     const raw = lineAt(lines, i)
     const hardBreak = raw.endsWith('  ')
     const line = (hardBreak ? raw.slice(0, -2) : raw).trim()
 
-    chunk = chunk.length === 0 ? line : concatenateSoftBreak(chunk, line)
+    if (chunkLength > 0 && !isCjk(previousLast) && !isCjk(line.charAt(0))) {
+      parts.push(' ')
+      chunkLength += 1
+      previousLast = ' '
+    }
+    parts.push(line)
+    chunkLength += line.length
+    /* v8 ignore next -- 段落に集まる行は空でないので trim しても空にならない */
+    previousLast = line.length > 0 ? line.charAt(line.length - 1) : previousLast
 
     if (hardBreak && i < lines.length - 1) {
-      result += `${chunk}${HARD_BREAK}`
-      chunk = ''
+      parts.push(HARD_BREAK)
+      chunkLength = 0
+      previousLast = ''
     }
   }
 
-  return result + chunk
-}
-
-function concatenateSoftBreak(previous: string, next: string): string {
-  const last = previous.charAt(previous.length - 1)
-  const first = next.charAt(0)
-  if (isCjk(last) || isCjk(first)) {
-    return previous + next
-  }
-
-  return `${previous} ${next}`
+  return parts.join('')
 }
 
 function isCjk(character: string): boolean {

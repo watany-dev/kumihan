@@ -13,20 +13,21 @@ export function createNodeServer(app: Hono): ReturnType<typeof createServer> {
 // クエリを差し替えられます。素の authority（ホストと任意のポート）
 // でなければ採用しません。
 const AUTHORITY =
-  /^(?:\[[0-9a-fA-F:.]+\]|[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?)*)(?::(\d{1,5}))?$/
+  /^(?:\[[0-9a-fA-F:.]+\]|[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?)*)(?::\d{1,5})?$/
 
 export function safeHost(host: string | undefined): string {
   if (host === undefined || host.length > 255) {
     return '127.0.0.1'
   }
-  const match = AUTHORITY.exec(host)
-  if (!match) {
+  if (!AUTHORITY.test(host)) {
     return '127.0.0.1'
   }
-  // 桁数だけでは 65535 を超えるポートを通してしまい、URL の構築が例外に
-  // なって 500 を返します。範囲まで見て、既定値へ落とします。
-  const port = match[1]
-  if (port !== undefined && Number(port) > 65535) {
+  // 素の authority に見えても URL が受け付けない値が残ります。範囲外の
+  // ポート（`:99999`）のほか、末尾のラベルが数字の名前は IPv4 として
+  // 解釈されるため `999.999.999.999` や `a.99999`、`09` も通りません。
+  // そのまま URL に埋めると例外になり 500 を返してしまうので、
+  // 実際に組み立てて確かめ、通らなければ既定値へ落とします。
+  if (!URL.canParse(`http://${host}/`)) {
     return '127.0.0.1'
   }
   return host

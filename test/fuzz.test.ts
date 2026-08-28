@@ -19,8 +19,28 @@ function mulberry32(seed: number): () => number {
   }
 }
 
-const INLINE = ['`', '**', '*', '[', '](', ')', ']', 'a', 'あ', '<', '&', '"', "'", ' ', 'x:']
+const INLINE = [
+  '`',
+  '**',
+  '*',
+  '***',
+  '[',
+  '](',
+  ')',
+  ']',
+  'a',
+  'あ',
+  '<',
+  '&',
+  '"',
+  "'",
+  ' ',
+  '\u0001',
+  'x:',
+  'javascript:',
+]
 const PREFIX = ['', '# ', '## ', '### ', '> ', '>', '- ', '1. ', '```', '---', '  ', '\t']
+const LINE_ENDING = ['\n', '\n', '\r\n', '\r']
 
 function generate(seed: number): string {
   const rand = mulberry32(seed)
@@ -36,7 +56,14 @@ function generate(seed: number): string {
     if (rand() < 0.35) line += '  '
     lines.push(line)
   }
-  return lines.join('\n')
+
+  // 改行コードも混ぜる。CR だけの原稿でも結果は変わらないはず。
+  let source = ''
+  for (let l = 0; l < lines.length; l += 1) {
+    source += lines[l] ?? ''
+    if (l < lines.length - 1) source += LINE_ENDING[Math.floor(rand() * LINE_ENDING.length)] ?? '\n'
+  }
+  return source
 }
 
 const VOID_TAGS = new Set(['br', 'hr'])
@@ -165,6 +192,14 @@ function findProblems(html: string): string[] {
   return problems
 }
 
+function measureQuotedLines(lines: number): number {
+  const input = '> ab\n'.repeat(lines)
+  renderMarkdown(input)
+  const started = performance.now()
+  renderMarkdown(input)
+  return performance.now() - started
+}
+
 function measureUnclosedBrackets(size: number): number {
   const input = '['.repeat(size)
   renderMarkdown(input)
@@ -203,5 +238,22 @@ describe('markdown fuzzing', () => {
     const small = Math.max(measureUnclosedBrackets(20_000), 0.5)
     const large = measureUnclosedBrackets(160_000)
     assert.ok(large < small * 40, `20000 文字 ${small}ms に対して 160000 文字 ${large}ms`)
+  })
+
+  it('keeps a URL that spans a hard break', () => {
+    // 強制改行の目印を残したまま URL を渡すと、制御文字とみなされて
+    // すべて `#` に落ちる。改行だった場所は空白に戻す。
+    assert.equal(renderMarkdown('[a](b  \nc)'), '<p><a href="b c">a</a></p>')
+    // 通常の改行（空白でつながる場合）と同じ結果になる。
+    assert.equal(renderMarkdown('[a](b\nc)'), renderMarkdown('[a](b  \nc)'))
+    // 空白を挟んでもスキームの判定は緩まない。
+    assert.equal(renderMarkdown('[a](java  \nscript:x)'), '<p><a href="#">a</a></p>')
+  })
+
+  it('does not re-scan the joined paragraph for every line', () => {
+    // 行を連ねた段落（`> 本文` を並べた原稿など）で二乗時間にならないこと。
+    const small = Math.max(measureQuotedLines(4_000), 0.5)
+    const large = measureQuotedLines(32_000)
+    assert.ok(large < small * 40, `4000 行 ${small}ms に対して 32000 行 ${large}ms`)
   })
 })
