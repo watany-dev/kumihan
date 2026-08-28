@@ -88,3 +88,22 @@ describe('control characters in the manuscript', () => {
     assert.equal(html, '<p>a<br>b</p>')
   })
 })
+
+describe('nested blockquote depth', () => {
+  it('does not overflow the stack on deeply nested quotes', () => {
+    const html = renderMarkdown(`${'>'.repeat(50000)} hi`)
+    assert.equal(html.startsWith('<blockquote>'), true)
+    assert.equal(html.includes('hi'), true)
+  })
+
+  it('escapes the remaining markers once the depth limit is reached', () => {
+    const html = renderMarkdown(`${'>'.repeat(40)} <b>hi</b>`)
+    assert.equal(html.includes('<b>'), false)
+    assert.match(html, /&lt;b&gt;hi&lt;\/b&gt;/)
+  })
+
+  it('still nests quotes below the limit', () => {
+    const html = renderMarkdown('>> hi')
+    assert.equal(html, '<blockquote>\n<blockquote>\n<p>hi</p>\n</blockquote>\n</blockquote>')
+  })
+})
