@@ -6,6 +6,8 @@
   "scripts": {
     "audit": "bun audit",
     "check": "vp check",
+    "cli": "bun src/cli.ts",
+    "compile": "bun scripts/compile.ts",
     "dev": "bun src/server.ts",
     "export": "bun scripts/export.ts",
     "fmt": "vp fmt",

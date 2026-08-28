@@ -56,16 +56,32 @@ bun run dev
 
 http://127.0.0.1:3000 を開きます。
 
+### スタンドアロン実行ファイル
+
+[Releases](https://github.com/watany-dev/kumihan/releases) からバイナリを落とすか、`bun run compile` で今のマシン向けに作ります。`v*.*.*` タグで全 OS 分が Release に載ります。
+
+```bash
+curl -fsSL -o kumihan \
+  https://github.com/watany-dev/kumihan/releases/latest/download/kumihan-linux-x64
+chmod +x kumihan
+./kumihan serve manuscript.md
+./kumihan export manuscript.md --out dist
+```
+
+`bun run compile -- --all` で Linux / macOS / Windows 向けを `dist-bin/` に出します。macOS で隔離されるときは `xattr -d com.apple.quarantine kumihan-darwin-arm64`。既定は `127.0.0.1:3000`、Codespaces では `--host 0.0.0.0`。
+
 ## コマンド
 
-| コマンド             | 内容                                           |
-| -------------------- | ---------------------------------------------- |
-| `bun run dev`        | Preview server を起動する                      |
-| `vp check`           | フォーマット・lint（警告もエラー）・型チェック |
-| `vp test`            | parser / renderer / HTTP のテスト              |
-| `vp test --coverage` | 同上。`src/**` のカバレッジ 95% を要求する     |
-| `bun run export`     | `dist/*.html` と CSS を生成する                |
-| `bun audit`          | 依存関係の脆弱性を検査する                     |
+| コマンド                   | 内容                                           |
+| -------------------------- | ---------------------------------------------- |
+| `bun run dev`              | Preview server を起動する                      |
+| `bun run compile`          | 今の OS 向けスタンドアロン実行ファイルを作る   |
+| `bun run compile -- --all` | Linux / macOS / Windows 向けバイナリを作る     |
+| `vp check`                 | フォーマット・lint（警告もエラー）・型チェック |
+| `vp test`                  | parser / renderer / HTTP のテスト              |
+| `vp test --coverage`       | 同上。`src/**` のカバレッジ 95% を要求する     |
+| `bun run export`           | `dist/*.html` と CSS を生成する                |
+| `bun audit`                | 依存関係の脆弱性を検査する                     |
 
 `vp fmt` / `vp lint` で個別にも実行できます。Oxlint は `correctness` と `suspicious` を error、`perf` を warn とし、`denyWarnings` で警告も CI を失敗させます。eval・`javascript:` URL・import cycle などのセキュリティ規則は個別に error です。Oxfmt は `printWidth: 100`、単一引用符、セミコロンなし、import 整列を強制します。
 
@@ -143,7 +159,7 @@ dist/
    └─ web.css
 ```
 
-`main` への push で GitHub Actions が `vp install --frozen-lockfile` → `vp test` → `vp run export` → GitHub Pages へ deploy します。リポジトリの Pages 設定は **GitHub Actions** を選んでください。
+`main` への push で GitHub Actions が `vp install --frozen-lockfile` → `vp test` → `vp run export` → GitHub Pages へ deploy します。リポジトリの Pages 設定は **GitHub Actions** を選んでください。バージョンタグ（`v0.1.0` など）では、同じ検査のあと `bun build --compile` でスタンドアロン実行ファイルを GitHub Release に載せます。
 
 CI ではこれに加えて `vp check`、カバレッジ 95%、`actionlint`、`zizmor` を実行します。セキュリティ用ワークフローは Semgrep、Gitleaks、`bun audit` を weekly でも回します。GitHub Actions はコミット SHA にピン留めし、Dependabot が週次で更新します。脆弱性の報告手順は [SECURITY.md](SECURITY.md) を見てください。
 

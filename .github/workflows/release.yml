@@ -1,0 +1,78 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  release:
+    name: Compile and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # create the GitHub Release and upload binaries
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@313600b80b104eadebb9111787d37a2e83e014ca # v1.17.0
+        with:
+          node-version-file: .node-version
+          # Publishing jobs must not restore a dependency cache.
+          cache: false
+          run-install: false
+
+      - name: Install dependencies
+        run: vp install --frozen-lockfile
+
+      - name: Check
+        run: vp check
+
+      - name: Test
+        run: vp test --coverage
+
+      - name: Compile binaries
+        run: vp run compile --all
+
+      - name: Checksums
+        run: |
+          set -euo pipefail
+          (
+            cd dist-bin
+            sha256sum kumihan-linux-x64 kumihan-linux-arm64 kumihan-darwin-x64 \
+              kumihan-darwin-arm64 kumihan-windows-x64.exe > SHA256SUMS.txt
+          )
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          test -f dist-bin/SHA256SUMS.txt
+          test -f dist-bin/kumihan-linux-x64
+          notes="$(mktemp)"
+          printf 'kumihan %s のスタンドアロン実行ファイルです。serve / export。macOS では xattr -d com.apple.quarantine が必要なことがあります。\n' "${TAG}" > "${notes}"
+          gh release create "${TAG}" \
+            --title "${TAG}" \
+            --notes-file "${notes}" \
+            dist-bin/kumihan-linux-x64 \
+            dist-bin/kumihan-linux-arm64 \
+            dist-bin/kumihan-darwin-x64 \
+            dist-bin/kumihan-darwin-arm64 \
+            dist-bin/kumihan-windows-x64.exe \
+            dist-bin/SHA256SUMS.txt

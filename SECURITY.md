@@ -30,6 +30,7 @@ In scope:
 - Markdown to HTML escaping and URL sanitization
 - Preview HTTP responses (security headers, error pages, cache policy)
 - Static export consumed via GitHub Pages
+- CLI (`serve` / `export`) and compiled standalone binaries
 - CI, GitHub Actions, and dependency installation
 
 Out of scope:
