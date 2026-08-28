@@ -54,7 +54,13 @@ if (command === 'export') {
   }
 } else if (command === 'serve') {
   const { host, port: portValue } = values
+  // 数値でない --port は listen に NaN を渡し、Node が任意の空きポートを
+  // 選んでしまいます。意図しないポートで公開しないよう、先に弾きます。
   const port = Number(portValue)
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    console.error(`invalid --port: ${portValue}`)
+    process.exit(1)
+  }
   createNodeServer(createPreviewApp({ source })).listen(port, host, () => {
     const shown = host === '0.0.0.0' ? '127.0.0.1' : host
     console.log(`Typeset preview: http://${shown}:${port}`)
