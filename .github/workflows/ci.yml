@@ -48,7 +48,7 @@ jobs:
         run: vp run export
 
       - name: Compile binary
-        run: bun run compile
+        run: vp run compile
 
       - name: Smoke-test binary
         run: |

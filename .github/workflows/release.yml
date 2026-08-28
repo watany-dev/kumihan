@@ -46,7 +46,7 @@ jobs:
         run: vp test --coverage
 
       - name: Compile binaries
-        run: bun run compile -- --all
+        run: vp run compile -- --all
 
       - name: Publish GitHub Release
         env:
