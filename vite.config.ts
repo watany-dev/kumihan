@@ -2,7 +2,7 @@ import { defineConfig } from 'vite-plus'
 
 export default defineConfig({
   lint: {
-    ignorePatterns: ['dist/**', 'build/**', 'coverage/**'],
+    ignorePatterns: ['dist/**', 'dist-bin/**', 'build/**', 'coverage/**'],
     plugins: ['unicorn', 'typescript', 'oxc', 'import', 'node', 'promise'],
     env: {
       node: true,
@@ -74,7 +74,14 @@ export default defineConfig({
     ],
   },
   fmt: {
-    ignorePatterns: ['dist/**', 'build/**', 'coverage/**', 'bun.lock', '.semgrep/**'],
+    ignorePatterns: [
+      'dist/**',
+      'dist-bin/**',
+      'build/**',
+      'coverage/**',
+      'bun.lock',
+      '.semgrep/**',
+    ],
     printWidth: 100,
     tabWidth: 2,
     useTabs: false,
@@ -99,7 +106,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
-      exclude: ['src/server.ts'],
+      exclude: ['src/server.ts', 'src/cli.ts'],
       reporter: ['text', 'lcov'],
       thresholds: {
         statements: 95,

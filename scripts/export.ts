@@ -1,13 +1,10 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { writeExport } from '../src/export/write-files.js'
 
-import { exportSite } from '../src/export/export-site.js'
+const written = await writeExport({
+  source: './content/index.md',
+  outDir: 'dist',
+})
 
-const markdown = await readFile('./content/index.md', 'utf8')
-
-for (const asset of exportSite(markdown)) {
-  const dest = join('dist', asset.pathname.replace(/^\//, ''))
-  await mkdir(dirname(dest), { recursive: true })
-  await writeFile(dest, Buffer.from(await asset.response.arrayBuffer()))
+for (const dest of written) {
   console.log(`wrote ${dest}`)
 }

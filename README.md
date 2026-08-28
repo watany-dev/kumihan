@@ -56,16 +56,53 @@ bun run dev
 
 http://127.0.0.1:3000 を開きます。
 
+### スタンドアロン実行ファイル
+
+Bun や Node.js を入れずに使う場合は、[GitHub Releases](https://github.com/watany-dev/kumihan/releases) から OS 向けのバイナリをダウンロードします。`v*.*.*` タグを push すると Actions が `bun build --compile` で全ターゲットを作り、Release に載せます。
+
+```bash
+# 例: Linux x64
+curl -fsSL -o kumihan \
+  https://github.com/watany-dev/kumihan/releases/latest/download/kumihan-linux-x64
+chmod +x kumihan
+./kumihan serve manuscript.md
+./kumihan export manuscript.md --out dist
+```
+
+| ファイル                  | 対象                 |
+| ------------------------- | -------------------- |
+| `kumihan-linux-x64`       | Linux x64            |
+| `kumihan-linux-arm64`     | Linux ARM64          |
+| `kumihan-darwin-x64`      | macOS Intel          |
+| `kumihan-darwin-arm64`    | macOS Apple Silicon  |
+| `kumihan-windows-x64.exe` | Windows x64          |
+| `SHA256SUMS.txt`          | SHA-256 チェックサム |
+
+開発中のマシン向けは `bun run compile`、配布用の全ターゲットは `bun run compile -- --all` で `dist-bin/` に出ます。各ファイルは Bun ランタイムを含むため 60–85MB 程度です。
+
+macOS で隔離属性が付く場合:
+
+```bash
+xattr -d com.apple.quarantine kumihan-darwin-arm64
+chmod +x kumihan-darwin-arm64
+```
+
+既定では `127.0.0.1:3000` だけを待ち受けます。Codespaces のように外部から開くときは `--host 0.0.0.0` を付けます。
+
 ## コマンド
 
-| コマンド             | 内容                                           |
-| -------------------- | ---------------------------------------------- |
-| `bun run dev`        | Preview server を起動する                      |
-| `vp check`           | フォーマット・lint（警告もエラー）・型チェック |
-| `vp test`            | parser / renderer / HTTP のテスト              |
-| `vp test --coverage` | 同上。`src/**` のカバレッジ 95% を要求する     |
-| `bun run export`     | `dist/*.html` と CSS を生成する                |
-| `bun audit`          | 依存関係の脆弱性を検査する                     |
+| コマンド                   | 内容                                           |
+| -------------------------- | ---------------------------------------------- |
+| `bun run dev`              | Preview server を起動する                      |
+| `bun run cli -- serve`     | 同じプレビューを CLI から起動する              |
+| `bun run cli -- export`    | `dist/*.html` と CSS を生成する                |
+| `bun run compile`          | 今の OS 向けスタンドアロン実行ファイルを作る   |
+| `bun run compile -- --all` | Linux / macOS / Windows 向けバイナリを作る     |
+| `vp check`                 | フォーマット・lint（警告もエラー）・型チェック |
+| `vp test`                  | parser / renderer / HTTP のテスト              |
+| `vp test --coverage`       | 同上。`src/**` のカバレッジ 95% を要求する     |
+| `bun run export`           | `dist/*.html` と CSS を生成する                |
+| `bun audit`                | 依存関係の脆弱性を検査する                     |
 
 `vp fmt` / `vp lint` で個別にも実行できます。Oxlint は `correctness` と `suspicious` を error、`perf` を warn とし、`denyWarnings` で警告も CI を失敗させます。eval・`javascript:` URL・import cycle などのセキュリティ規則は個別に error です。Oxfmt は `printWidth: 100`、単一引用符、セミコロンなし、import 整列を強制します。
 
@@ -143,7 +180,7 @@ dist/
    └─ web.css
 ```
 
-`main` への push で GitHub Actions が `vp install --frozen-lockfile` → `vp test` → `vp run export` → GitHub Pages へ deploy します。リポジトリの Pages 設定は **GitHub Actions** を選んでください。
+`main` への push で GitHub Actions が `vp install --frozen-lockfile` → `vp test` → `vp run export` → GitHub Pages へ deploy します。リポジトリの Pages 設定は **GitHub Actions** を選んでください。バージョンタグ（`v0.1.0` など）では、同じ検査のあと `bun build --compile` でスタンドアロン実行ファイルを GitHub Release に載せます。
 
 CI ではこれに加えて `vp check`、カバレッジ 95%、`actionlint`、`zizmor` を実行します。セキュリティ用ワークフローは Semgrep、Gitleaks、`bun audit` を weekly でも回します。GitHub Actions はコミット SHA にピン留めし、Dependabot が週次で更新します。脆弱性の報告手順は [SECURITY.md](SECURITY.md) を見てください。
 

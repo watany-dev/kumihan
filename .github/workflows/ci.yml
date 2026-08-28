@@ -19,7 +19,7 @@ jobs:
   verify:
     name: Verify
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions:
       contents: read # checkout the repository
     steps:
@@ -46,6 +46,19 @@ jobs:
 
       - name: Export
         run: vp run export
+
+      - name: Compile binary
+        run: bun run compile
+
+      - name: Smoke-test binary
+        run: |
+          set -euo pipefail
+          ./dist-bin/kumihan --version
+          ./dist-bin/kumihan --help
+          ./dist-bin/kumihan export content/index.md --out /tmp/kumihan-export
+          test -f /tmp/kumihan-export/index.html
+          test -f /tmp/kumihan-export/magazine.html
+          test -f /tmp/kumihan-export/web.html
 
   workflow-audit:
     name: Workflow audit
