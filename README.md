@@ -71,6 +71,20 @@ bun run bench -- --iterations 300 --scale 100
 `renderInline` / `renderMarkdown` / `renderDocument` の中央値・最小値・
 スループットを表示します。
 
+バンドルサイズとメモリも測れます。
+
+```bash
+bun run bench:size                     # バンドルの生 / minify / gzip とモジュール内訳
+bun run bench:size -- --binary         # スタンドアロン実行ファイルのサイズも測る
+bun run bench:memory                   # 既定は 400 倍の原稿
+bun run bench:memory -- --scale 2000
+```
+
+`bench:size` は `src/cli.ts` を 1 ファイルへバンドルし、どのモジュールが
+何バイト占めているかを降順で出します。`bench:memory` は変換の段階ごとに
+RSS のピークと保持ヒープを測ります。RSS は別スレッドから 1ms 間隔で採るので、
+同期処理の途中の山も拾えます。どちらも `--json` で機械可読な出力になります。
+
 ### スタンドアロン実行ファイル
 
 [Releases](https://github.com/watany-dev/kumihan/releases) からバイナリを落とすか、`bun run compile` で今のマシン向けに作ります。`v*.*.*` タグで全 OS 分が Release に載ります。
@@ -90,6 +104,9 @@ chmod +x kumihan
 | コマンド                   | 内容                                           |
 | -------------------------- | ---------------------------------------------- |
 | `bun run dev`              | Preview server を起動する                      |
+| `bun run bench`            | 組版パイプラインの処理時間を測る               |
+| `bun run bench:size`       | バンドルサイズとモジュール内訳を測る           |
+| `bun run bench:memory`     | 変換段階ごとの RSS ピークを測る                |
 | `bun run compile`          | 今の OS 向けスタンドアロン実行ファイルを作る   |
 | `bun run compile -- --all` | Linux / macOS / Windows 向けバイナリを作る     |
 | `vp check`                 | フォーマット・lint（警告もエラー）・型チェック |

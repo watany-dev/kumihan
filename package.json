@@ -6,6 +6,8 @@
   "scripts": {
     "audit": "bun audit",
     "bench": "bun scripts/bench.ts",
+    "bench:memory": "bun scripts/memory.ts",
+    "bench:size": "bun scripts/size.ts",
     "check": "vp check",
     "cli": "bun src/cli.ts",
     "compile": "bun scripts/compile.ts",
