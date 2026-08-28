@@ -58,10 +58,9 @@ http://127.0.0.1:3000 を開きます。
 
 ### スタンドアロン実行ファイル
 
-Bun や Node.js を入れずに使う場合は、[GitHub Releases](https://github.com/watany-dev/kumihan/releases) から OS 向けのバイナリをダウンロードします。`v*.*.*` タグを push すると Actions が `bun build --compile` で全ターゲットを作り、Release に載せます。
+[Releases](https://github.com/watany-dev/kumihan/releases) からバイナリを落とすか、`bun run compile` で今のマシン向けに作ります。`v*.*.*` タグで全 OS 分が Release に載ります。
 
 ```bash
-# 例: Linux x64
 curl -fsSL -o kumihan \
   https://github.com/watany-dev/kumihan/releases/latest/download/kumihan-linux-x64
 chmod +x kumihan
@@ -69,33 +68,13 @@ chmod +x kumihan
 ./kumihan export manuscript.md --out dist
 ```
 
-| ファイル                  | 対象                 |
-| ------------------------- | -------------------- |
-| `kumihan-linux-x64`       | Linux x64            |
-| `kumihan-linux-arm64`     | Linux ARM64          |
-| `kumihan-darwin-x64`      | macOS Intel          |
-| `kumihan-darwin-arm64`    | macOS Apple Silicon  |
-| `kumihan-windows-x64.exe` | Windows x64          |
-| `SHA256SUMS.txt`          | SHA-256 チェックサム |
-
-開発中のマシン向けは `bun run compile`、配布用の全ターゲットは `bun run compile -- --all` で `dist-bin/` に出ます。各ファイルは Bun ランタイムを含むため 60–85MB 程度です。
-
-macOS で隔離属性が付く場合:
-
-```bash
-xattr -d com.apple.quarantine kumihan-darwin-arm64
-chmod +x kumihan-darwin-arm64
-```
-
-既定では `127.0.0.1:3000` だけを待ち受けます。Codespaces のように外部から開くときは `--host 0.0.0.0` を付けます。
+`bun run compile -- --all` で Linux / macOS / Windows 向けを `dist-bin/` に出します。macOS で隔離されるときは `xattr -d com.apple.quarantine kumihan-darwin-arm64`。既定は `127.0.0.1:3000`、Codespaces では `--host 0.0.0.0`。
 
 ## コマンド
 
 | コマンド                   | 内容                                           |
 | -------------------------- | ---------------------------------------------- |
 | `bun run dev`              | Preview server を起動する                      |
-| `bun run cli -- serve`     | 同じプレビューを CLI から起動する              |
-| `bun run cli -- export`    | `dist/*.html` と CSS を生成する                |
 | `bun run compile`          | 今の OS 向けスタンドアロン実行ファイルを作る   |
 | `bun run compile -- --all` | Linux / macOS / Windows 向けバイナリを作る     |
 | `vp check`                 | フォーマット・lint（警告もエラー）・型チェック |

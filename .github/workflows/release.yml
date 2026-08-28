@@ -46,7 +46,16 @@ jobs:
         run: vp test --coverage
 
       - name: Compile binaries
-        run: vp run compile -- --all
+        run: vp run compile --all
+
+      - name: Checksums
+        run: |
+          set -euo pipefail
+          (
+            cd dist-bin
+            sha256sum kumihan-linux-x64 kumihan-linux-arm64 kumihan-darwin-x64 \
+              kumihan-darwin-arm64 kumihan-windows-x64.exe > SHA256SUMS.txt
+          )
 
       - name: Publish GitHub Release
         env:
@@ -57,36 +66,7 @@ jobs:
           test -f dist-bin/SHA256SUMS.txt
           test -f dist-bin/kumihan-linux-x64
           notes="$(mktemp)"
-          {
-            printf 'kumihan %s のスタンドアロン実行ファイルです。Bun や Node.js のインストールは不要です。\n\n' "${TAG}"
-            cat <<'EOF'
-          ## ファイル
-
-          | ファイル | 対象 |
-          | --- | --- |
-          | `kumihan-linux-x64` | Linux x64 |
-          | `kumihan-linux-arm64` | Linux ARM64 |
-          | `kumihan-darwin-x64` | macOS Intel |
-          | `kumihan-darwin-arm64` | macOS Apple Silicon |
-          | `kumihan-windows-x64.exe` | Windows x64 |
-          | `SHA256SUMS.txt` | SHA-256 チェックサム |
-
-          ## 使い方
-
-          ```bash
-          chmod +x kumihan-linux-x64
-          ./kumihan-linux-x64 serve manuscript.md
-          ./kumihan-linux-x64 export manuscript.md --out dist
-          ```
-
-          macOS で隔離属性が付く場合:
-
-          ```bash
-          xattr -d com.apple.quarantine kumihan-darwin-arm64
-          chmod +x kumihan-darwin-arm64
-          ```
-          EOF
-          } > "${notes}"
+          printf 'kumihan %s — bun compile のスタンドアロン実行ファイル。`serve` / `export`。macOS は xattr -d com.apple.quarantine が必要なことがあります。\n' "${TAG}" > "${notes}"
           gh release create "${TAG}" \
             --title "${TAG}" \
             --notes-file "${notes}" \

@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 import { describe, it } from 'vite-plus/test'
 
 import { exportSite } from '../src/export/export-site.js'
+import { writeExport } from '../src/export/write-files.js'
 import { renderMarkdown } from '../src/markdown/render.js'
 import { renderDocument } from '../src/typesetting/render-page.js'
 import { typesetCss } from '../src/typesetting/typeset.css.js'
@@ -96,5 +100,20 @@ describe('exportSite', () => {
     assert.match(await index.response.text(), /<article class="typeset">/)
     assert.match(await magazine.response.text(), /<article class="typeset cols-2">/)
     assert.match(await web.response.text(), /<body class="web">/)
+  })
+})
+
+describe('writeExport', () => {
+  it('writes html and css under the output directory', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'kumihan-export-'))
+    try {
+      const source = join(dir, 'index.md')
+      await writeFile(source, '# Hello\n')
+      const written = await writeExport(source, join(dir, 'out'))
+      assert.ok(written.some((path) => path.endsWith('index.html')))
+      assert.match(await readFile(written[0] ?? '', 'utf8'), /Hello/)
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
   })
 })
