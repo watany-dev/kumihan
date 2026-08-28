@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "audit": "bun audit",
+    "bench": "bun scripts/bench.ts",
     "check": "vp check",
     "cli": "bun src/cli.ts",
     "compile": "bun scripts/compile.ts",

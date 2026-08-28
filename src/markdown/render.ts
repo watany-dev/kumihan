@@ -20,7 +20,7 @@ export function renderMarkdown(source: string): string {
   while (i < lines.length) {
     const line = lineAt(lines, i)
 
-    if (line.trim() === '') {
+    if (isBlank(line)) {
       i += 1
       continue
     }
@@ -74,8 +74,10 @@ export function renderMarkdown(source: string): string {
   return blocks.join('\n')
 }
 
+const HEADING = /^(#{1,3}) (.+)$/
+
 function parseHeading(line: string): string | null {
-  const match = /^(#{1,3}) (.+)$/.exec(line)
+  const match = HEADING.exec(line)
   if (!match) {
     return null
   }
@@ -88,16 +90,27 @@ function parseHeading(line: string): string | null {
   return `<h${level}>${renderInline(text.trim())}</h${level}>`
 }
 
+const BLANK = /^\s*$/
+const HORIZONTAL_RULE = /^\s*-{3,}\s*$/
+
+function isBlank(line: string): boolean {
+  return line.length === 0 || BLANK.test(line)
+}
+
 function isHorizontalRule(line: string): boolean {
-  return /^-{3,}$/.test(line.trim())
+  return HORIZONTAL_RULE.test(line)
 }
 
 function parseFencedCode(lines: string[], start: number): { html: string; next: number } {
   const body: string[] = []
   let i = start + 1
 
-  while (i < lines.length && !lineAt(lines, i).startsWith('```')) {
-    body.push(lineAt(lines, i))
+  while (i < lines.length) {
+    const line = lineAt(lines, i)
+    if (line.startsWith('```')) {
+      break
+    }
+    body.push(line)
     i += 1
   }
 
@@ -115,8 +128,12 @@ function parseBlockquote(lines: string[], start: number): { html: string; next: 
   const inner: string[] = []
   let i = start
 
-  while (i < lines.length && lineAt(lines, i).startsWith('>')) {
-    let content = lineAt(lines, i).slice(1)
+  while (i < lines.length) {
+    const line = lineAt(lines, i)
+    if (!line.startsWith('>')) {
+      break
+    }
+    let content = line.slice(1)
     if (content.startsWith(' ')) {
       content = content.slice(1)
     }
@@ -140,9 +157,12 @@ function parseList(
   const items: string[] = []
   let i = start
 
-  while (i < lines.length && marker.test(lineAt(lines, i))) {
-    const text = lineAt(lines, i).replace(marker, '')
-    items.push(`<li>${renderInline(text)}</li>`)
+  while (i < lines.length) {
+    const line = lineAt(lines, i)
+    if (!marker.test(line)) {
+      break
+    }
+    items.push(`<li>${renderInline(line.replace(marker, ''))}</li>`)
     i += 1
   }
 
@@ -156,10 +176,23 @@ function parseParagraph(lines: string[], start: number): { html: string; next: n
   const collected: string[] = []
   let i = start
 
-  while (i < lines.length && lineAt(lines, i).trim() !== '' && !isBlockStart(lineAt(lines, i))) {
-    collected.push(lineAt(lines, i))
+  while (i < lines.length) {
+    const line = lineAt(lines, i)
+    if (isBlank(line) || isBlockStart(line)) {
+      break
+    }
+    collected.push(line)
     i += 1
   }
+
+  /* v8 ignore start -- isBlockStart は renderMarkdown の分岐と一致しているため到達しない */
+  if (i === start) {
+    // 保険。どのブロックにもならなかった行をここで消費しないと、
+    // 呼び出し側の while ループが前進せず無限ループになる。
+    collected.push(lineAt(lines, start))
+    i = start + 1
+  }
+  /* v8 ignore stop */
 
   const joined = joinParagraphLines(collected)
   const html = renderInline(joined).replaceAll(HARD_BREAK, '<br>')
@@ -169,9 +202,14 @@ function parseParagraph(lines: string[], start: number): { html: string; next: n
   }
 }
 
+// ブロックを開始しうる先頭文字（水平線は字下げを許すため空白も含む）。
+// 段落の大半はこの 1 回の判定だけで抜けられます。
+const BLOCK_START_HEAD = /^[`#\->\d\s]/
+
 function isBlockStart(line: string): boolean {
+  if (!BLOCK_START_HEAD.test(line)) return false
   if (line.startsWith('```')) return true
-  if (/^#{1,3} /.test(line)) return true
+  if (HEADING.test(line)) return true
   if (isHorizontalRule(line)) return true
   if (line.startsWith('>')) return true
   if (line.startsWith('- ')) return true

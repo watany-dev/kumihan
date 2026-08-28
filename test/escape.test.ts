@@ -35,3 +35,19 @@ describe('sanitizeUrl', () => {
     assert.equal(sanitizeUrl(`https://example.com/${String.fromCharCode(0x7f)}`), '#')
   })
 })
+
+describe('escapeHtml fast path', () => {
+  it('returns text without escapable characters unchanged', () => {
+    const plain = '組版された本文 — no markup here.'
+    assert.equal(escapeHtml(plain), plain)
+    assert.equal(escapeHtml(''), '')
+  })
+
+  it('escapes every escapable character in one pass', () => {
+    assert.equal(escapeHtml(`&<>"'`), '&amp;&lt;&gt;&quot;&#39;')
+  })
+
+  it('does not double-escape the ampersands it introduces', () => {
+    assert.equal(escapeHtml('<a & b>'), '&lt;a &amp; b&gt;')
+  })
+})
