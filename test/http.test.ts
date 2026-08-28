@@ -191,6 +191,34 @@ describe('Host header validation', () => {
     assert.equal(safeHost(`${'a'.repeat(256)}.example.com`), '127.0.0.1')
   })
 
+  it('falls back when the port is out of range', () => {
+    // 桁数だけを見ていると 65535 超のポートが素通りし、URL の構築が
+    // 例外になって 500 を返してしまう。
+    assert.equal(safeHost('localhost:65535'), 'localhost:65535')
+    assert.equal(safeHost('localhost:65536'), '127.0.0.1')
+    assert.equal(safeHost('localhost:99999'), '127.0.0.1')
+    assert.equal(safeHost('[::1]:70000'), '127.0.0.1')
+  })
+
+  it('answers normally for a Host header with an out-of-range port', async () => {
+    let seen = ''
+    await withServer(
+      (req, res) => {
+        req.headers.host = 'localhost:99999'
+        void dispatchNodeRequest(req, res, async (request) => {
+          seen = new URL(request.url).host
+          return new Response('ok')
+        })
+      },
+      async (port) => {
+        const res = await fetch(`http://127.0.0.1:${port}/health`)
+        assert.equal(res.status, 200)
+        assert.equal(await res.text(), 'ok')
+        assert.equal(seen, '127.0.0.1')
+      },
+    )
+  })
+
   it('does not let the Host header change the routed path', async () => {
     let seen = ''
     await withServer(
