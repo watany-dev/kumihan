@@ -12,6 +12,7 @@ describe('preview app', () => {
     const res = await app.request('/health')
     assert.equal(res.status, 200)
     assert.equal(res.headers.get('Content-Type'), 'application/json')
+    assert.equal(res.headers.get('Refresh'), null)
     assert.deepEqual(await res.json(), { ok: true })
   })
 
@@ -43,6 +44,7 @@ describe('preview app', () => {
     assert.equal(res.status, 200)
     assert.equal(res.headers.get('Content-Type'), 'text/html; charset=utf-8')
     assert.equal(res.headers.get('Cache-Control'), 'no-store')
+    assert.equal(res.headers.get('Refresh'), '2')
     const html = await res.text()
     assert.match(html, /^<!DOCTYPE html>/)
     assert.match(html, /<article class="typeset">/)
@@ -85,6 +87,7 @@ describe('preview app', () => {
     const app = createPreviewApp({ source: './content/does-not-exist.md' })
     const res = await app.request('/')
     assert.equal(res.status, 404)
+    assert.equal(res.headers.get('Refresh'), '2')
     const html = await res.text()
     assert.match(html, /原稿が見つかりません/)
     assert.equal(html.toLowerCase().includes('enoent'), false)

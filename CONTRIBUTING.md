@@ -42,7 +42,7 @@ GitHub Codespaces と Dev Container は Bun と Vite+ を入れ、`vp install --
 | `GET /assets/typeset.css` | 組版 CSS（1段 / 2段）                          |
 | `GET /assets/web.css`     | Web 記事 CSS                                   |
 
-`GET /` は毎回ファイルを読み直し、`Cache-Control: no-store` で返します。応答には CSP（`script-src 'none'`）ほかセキュリティヘッダを付け、静的 HTML にも同じ CSP を `<meta>` で埋めます。原稿が無いときは 404、読み込み失敗時は 500 で、stack trace はブラウザへ出しません。`CONNECT` / `TRACE` / `TRACK` は 405 です。
+`GET /` は毎回ファイルを読み直し、`Cache-Control: no-store` で返します。HTML 応答には `Refresh: 2` を付けます（export した静的 HTML には付けません）。応答には CSP（`script-src 'none'`）ほかセキュリティヘッダを付け、静的 HTML にも同じ CSP を `<meta>` で埋めます。原稿が無いときは 404、読み込み失敗時は 500 で、stack trace はブラウザへ出しません。`CONNECT` / `TRACE` / `TRACK` は 405 です。
 
 `bun run dev` と `kumihan serve` の既定は `127.0.0.1:3000` です。Codespaces では `--host 0.0.0.0`、ソースから動かすときは `KUMIHAN_HOST` で広げます。listen に失敗したときは理由を 1 行で出して終了します。
 

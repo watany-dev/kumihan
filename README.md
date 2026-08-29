@@ -26,7 +26,7 @@ chmod +x kumihan
 ./kumihan serve manuscript.md
 ```
 
-ブラウザで http://127.0.0.1:3000 を開き、右上から表示モードを切り替えます。保存した原稿は、ページを再読み込みすると反映されます。
+ブラウザで http://127.0.0.1:3000 を開き、右上から表示モードを切り替えます。保存した原稿は、数秒以内にプレビューへ反映されます。
 
 ```bash
 ./kumihan export manuscript.md --out dist
@@ -49,7 +49,7 @@ macOS で隔離されるときは `xattr -d com.apple.quarantine kumihan-darwin-
 1. このリポジトリを Codespaces で開く
 2. ターミナルで `bun run dev` を実行する
 3. Forwarded Port `3000`（Typeset Preview）をブラウザで開く
-4. `content/index.md` を編集して保存し、ブラウザを再読み込みする
+4. `content/index.md` を編集して保存する
 
 ### ローカル
 
@@ -92,7 +92,7 @@ HTML は escape します。リンクは `https:` / `http:` / `mailto:` / 相対
 | 2段    | `/magazine.html` | 同じ原稿を A4 縦2列にする。見出し・リード・コードは全幅。長いときはおよそ 40 行ごとに頁分け        |
 | Web    | `/web.html`      | 画面幅に合わせた記事。本文はゴシック                                                               |
 
-切り替えは右上（Web ではヘッダー）から行います。JavaScript は使いません。組版と 2段は画面上でも印刷時でも A4 が積み重なります。v0.1 の live reload はブラウザの手動更新です。
+切り替えは右上（Web ではヘッダー）から行います。JavaScript は使いません。組版と 2段は画面上でも印刷時でも A4 が積み重なります。保存するとプレビューが追従します。
 
 ## 書き出しと GitHub Pages
 
