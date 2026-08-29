@@ -155,6 +155,8 @@ body {
   column-rule: 0.3pt solid #d0cdc6;
   font-size: 9.5pt;
   line-height: 1.75;
+  height: calc(40 * 1.75em);
+  column-fill: balance;
 }
 
 .typeset.cols-2 h1,
@@ -221,6 +223,11 @@ body {
     box-shadow: none;
     width: 210mm;
     min-height: 297mm;
+    break-after: page;
+  }
+
+  .paper:last-of-type {
+    break-after: auto;
   }
 }
 `
