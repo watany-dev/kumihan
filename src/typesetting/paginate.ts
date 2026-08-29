@@ -1,12 +1,17 @@
 export const MAGAZINE_LINES_PER_PAGE = 40
 
 /**
- * 2段組をおよそ 40 行の頁に分割する。ブロックの途中では切らない。
- *
- * ponytail: HTML 断片の改行数で詰める。折り返しや段の高さは見ない。
- * 視覚行がずれたら estimate を足す。
+ * 1段組。A4 本文（297mm − 上下 46mm）に、短い段落（行送り 1.9em + 下余白 0.9em）
+ * がおよそ 24 個入る。2段の 40 より小さいのは、字が大きく段もないため。
  */
-export function paginateMagazine(html: string): string[] {
+export const PRINT_LINES_PER_PAGE = 24
+
+/**
+ * HTML 断片の改行数で頁に詰める。ブロックの途中では切らない。
+ *
+ * ponytail: 折り返しや段の高さは見ない。視覚行がずれたら estimate を足す。
+ */
+export function paginate(html: string, linesPerPage: number): string[] {
   const blocks = splitBlocks(html)
   if (blocks.length === 0) {
     return ['']
@@ -18,7 +23,7 @@ export function paginateMagazine(html: string): string[] {
 
   for (const block of blocks) {
     const lines = lineCount(block)
-    if (current.length > 0 && used + lines > MAGAZINE_LINES_PER_PAGE) {
+    if (current.length > 0 && used + lines > linesPerPage) {
       pages.push(current)
       current = []
       used = 0
