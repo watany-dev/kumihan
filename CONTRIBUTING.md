@@ -33,7 +33,7 @@ GitHub Codespaces と Dev Container は Bun と Vite+ を入れ、`vp install --
 | 経路 | 内容 |
 | ---- | ---- |
 | `GET /` | 原稿を読み、A4 1段組 HTML を返す |
-| `GET /magazine.html` | 同じ原稿を A4 2段組で返す |
+| `GET /magazine.html` | 同じ原稿を A4 2段組（約 40 行で頁分け）で返す |
 | `GET /magazine` | `/magazine.html` と同じ |
 | `GET /web.html` | 同じ原稿を Web 記事スタイルで返す |
 | `GET /web` | `/web.html` と同じ |
