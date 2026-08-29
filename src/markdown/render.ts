@@ -16,9 +16,22 @@ function lineAt(lines: readonly string[], index: number): string {
 // これを超えた引用の中身は、記法を解釈せず段落として出します。
 const MAX_BLOCKQUOTE_DEPTH = 32
 
+// 改行コードの正規化は原稿全体を作り直します。`\r` を含まない原稿（ほとんどが
+// そうです）では indexOf 一回で済ませ、正規表現と再確保をまるごと省きます。
+function normalizeNewlines(source: string): string {
+  return source.indexOf('\r') === -1 ? source : source.replace(/\r\n?/g, '\n')
+}
+
 export function renderMarkdown(source: string, depth = 0): string {
-  const lines = stripHardBreakSentinel(source.replace(/\r\n?/g, '\n')).split('\n')
-  const blocks: string[] = []
+  return renderLines(stripHardBreakSentinel(normalizeNewlines(source)).split('\n'), depth)
+}
+
+// 入れ子の引用は行の配列をそのまま渡します。以前は引用の中身を `\n` で
+// つないでから renderMarkdown に渡していましたが、渡された側はまず同じ
+// 区切りで split し直すだけでした。改行の正規化と目印の除去も外側で済んで
+// いるので、この往復はまるごと省けます。
+function renderLines(lines: readonly string[], depth: number): string {
+  let blocks = ''
   let i = 0
 
   while (i < lines.length) {
@@ -31,56 +44,73 @@ export function renderMarkdown(source: string, depth = 0): string {
 
     if (line.startsWith('```')) {
       const parsed = parseFencedCode(lines, i)
-      blocks.push(parsed.html)
+      blocks = append(blocks, parsed.html)
       i = parsed.next
       continue
     }
 
     const heading = parseHeading(line)
     if (heading) {
-      blocks.push(heading)
+      blocks = append(blocks, heading)
       i += 1
       continue
     }
 
     if (isHorizontalRule(line)) {
-      blocks.push('<hr>')
+      blocks = append(blocks, '<hr>')
       i += 1
       continue
     }
 
     if (line.startsWith('>') && depth < MAX_BLOCKQUOTE_DEPTH) {
       const parsed = parseBlockquote(lines, i, depth)
-      blocks.push(parsed.html)
+      blocks = append(blocks, parsed.html)
       i = parsed.next
       continue
     }
 
     if (line.startsWith('- ')) {
       const parsed = parseList(lines, i, 'ul', /^- /)
-      blocks.push(parsed.html)
+      blocks = append(blocks, parsed.html)
       i = parsed.next
       continue
     }
 
     if (/^\d+\. /.test(line)) {
       const parsed = parseList(lines, i, 'ol', /^\d+\. /)
-      blocks.push(parsed.html)
+      blocks = append(blocks, parsed.html)
       i = parsed.next
       continue
     }
 
     const parsed = parseParagraph(lines, i, depth)
-    blocks.push(parsed.html)
+    blocks = append(blocks, parsed.html)
     i = parsed.next
   }
 
-  return blocks.join('\n')
+  return blocks
+}
+
+// ブロックの連結は文字列で行います。配列に貯めて join すると、配列そのものと
+// 連結後の文字列を二重に持つことになります。
+function append(blocks: string, html: string): string {
+  return blocks.length === 0 ? html : `${blocks}\n${html}`
 }
 
 const HEADING = /^(#{1,3}) (.+)$/
+const HASH = 0x23
+
+// 見出しになりうるのは `#` で始まる行だけです。この 1 文字を先に見ておくと、
+// 段落の各行に見出しの正規表現を当てずに済みます。
+function isHeadingLine(line: string): boolean {
+  return line.charCodeAt(0) === HASH && HEADING.test(line)
+}
 
 function parseHeading(line: string): string | null {
+  if (line.charCodeAt(0) !== HASH) {
+    return null
+  }
+
   const match = HEADING.exec(line)
   if (!match) {
     return null
@@ -105,7 +135,7 @@ function isHorizontalRule(line: string): boolean {
   return HORIZONTAL_RULE.test(line)
 }
 
-function parseFencedCode(lines: string[], start: number): { html: string; next: number } {
+function parseFencedCode(lines: readonly string[], start: number): { html: string; next: number } {
   const body: string[] = []
   let i = start + 1
 
@@ -129,7 +159,7 @@ function parseFencedCode(lines: string[], start: number): { html: string; next: 
 }
 
 function parseBlockquote(
-  lines: string[],
+  lines: readonly string[],
   start: number,
   depth: number,
 ): { html: string; next: number } {
@@ -149,7 +179,7 @@ function parseBlockquote(
     i += 1
   }
 
-  const innerHtml = renderMarkdown(inner.join('\n'), depth + 1)
+  const innerHtml = renderLines(inner, depth + 1)
   return {
     html: `<blockquote>\n${innerHtml}\n</blockquote>`,
     next: i,
@@ -157,7 +187,7 @@ function parseBlockquote(
 }
 
 function parseList(
-  lines: string[],
+  lines: readonly string[],
   start: number,
   tag: 'ul' | 'ol',
   marker: RegExp,
@@ -167,10 +197,13 @@ function parseList(
 
   while (i < lines.length) {
     const line = lineAt(lines, i)
-    if (!marker.test(line)) {
+    // test と replace で 2 回当てていた正規表現を 1 回にします。marker は
+    // 行頭に錨を張っているので、replace が消すのは match[0] そのものです。
+    const match = marker.exec(line)
+    if (!match) {
       break
     }
-    items.push(`<li>${renderInline(line.replace(marker, ''))}</li>`)
+    items.push(`<li>${renderInline(line.slice(match[0].length))}</li>`)
     i += 1
   }
 
@@ -181,7 +214,7 @@ function parseList(
 }
 
 function parseParagraph(
-  lines: string[],
+  lines: readonly string[],
   start: number,
   depth: number,
 ): { html: string; next: number } {
@@ -223,7 +256,7 @@ const BLOCK_START_HEAD = /^[`#\->\d\s]/
 function isBlockStart(line: string, depth: number): boolean {
   if (!BLOCK_START_HEAD.test(line)) return false
   if (line.startsWith('```')) return true
-  if (HEADING.test(line)) return true
+  if (isHeadingLine(line)) return true
   if (isHorizontalRule(line)) return true
   if (line.startsWith('>')) return depth < MAX_BLOCKQUOTE_DEPTH
   if (line.startsWith('- ')) return true
@@ -236,7 +269,13 @@ function isBlockStart(line: string, depth: number): boolean {
 // 実体化しなおすことになり、段落の行数に対して二乗時間になります
 // （`> 本文` を並べただけの原稿がそれです）。末尾の文字と長さを別に
 // 持ち回り、断片は最後にまとめて join します。
-function joinParagraphLines(lines: string[]): string {
+function joinParagraphLines(lines: readonly string[]): string {
+  // 1 行だけの段落が大半です。行の境目が無いので連結もいらず、末尾 2 スペースの
+  // 目印も（次の行が無いので）付きません。trim の結果がそのまま答えになります。
+  if (lines.length === 1) {
+    return lineAt(lines, 0).trim()
+  }
+
   const parts: string[] = []
   let chunkLength = 0
   let previousLast = ''
