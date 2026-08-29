@@ -49,8 +49,20 @@ const command = positionals[0]
 const source = positionals[1] ?? 'content/index.md'
 
 if (command === 'export') {
-  for (const dest of await writeExport(source, values.out)) {
-    console.log(`wrote ${dest}`)
+  // 原稿が無いときに素の例外を出すと、内部のスタックや errno がそのまま
+  // 出てしまいます。打ち間違いは普通に起きるので、短く伝えて終わります。
+  try {
+    for (const dest of await writeExport(source, values.out)) {
+      console.log(`wrote ${dest}`)
+    }
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
+      console.error(`原稿が見つかりません: ${source}`)
+    } else {
+      const detail = error instanceof Error ? error.message : String(error)
+      console.error(`書き出しに失敗しました: ${detail}`)
+    }
+    process.exit(1)
   }
 } else if (command === 'serve') {
   const { host, port: portValue } = values

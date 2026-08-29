@@ -30,6 +30,14 @@ describe('sanitizeUrl', () => {
     assert.equal(sanitizeUrl('vbscript:msgbox(1)'), '#')
   })
 
+  it('does not let whitespace hide a scheme', () => {
+    // 本文からのリンクは空白を含む URL をそもそも作りませんが、
+    // sanitizeUrl 自体は最後の砦なので、空白を詰めてから判定します。
+    assert.equal(sanitizeUrl('java script:alert(1)'), '#')
+    assert.equal(sanitizeUrl('java\u00a0script:x'), '#')
+    assert.equal(sanitizeUrl('https://example.com/a b'), 'https://example.com/a b')
+  })
+
   it('rejects URLs that contain C0 controls including DEL', () => {
     assert.equal(sanitizeUrl('https://example.com/\u0001x'), '#')
     assert.equal(sanitizeUrl(`https://example.com/${String.fromCharCode(0x7f)}`), '#')
