@@ -6,7 +6,7 @@ import { renderMarkdown } from '../src/markdown/render.js'
 import { parseAlignments, splitTableRow } from '../src/markdown/table.js'
 
 function tableHtml(...lines: string[]): string {
-  return ['<div class="table-wrap">', ...lines, '</div>'].join('\n')
+  return lines.join('\n')
 }
 
 describe('splitTableRow', () => {
@@ -131,10 +131,10 @@ describe('renderMarkdown tables', () => {
       tableHtml(
         '<table>',
         '<thead>',
-        '<tr><th class="align-left">l</th><th class="align-center">c</th><th class="align-right">r</th></tr>',
+        '<tr><th>l</th><th class="align-center">c</th><th class="align-right">r</th></tr>',
         '</thead>',
         '<tbody>',
-        '<tr><td class="align-left">a</td><td class="align-center">b</td><td class="align-right">c</td></tr>',
+        '<tr><td>a</td><td class="align-center">b</td><td class="align-right">c</td></tr>',
         '</tbody>',
         '</table>',
       ),

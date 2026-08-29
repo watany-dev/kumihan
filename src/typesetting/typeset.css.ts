@@ -152,13 +152,8 @@ body {
 .typeset table {
   width: 100%;
   border-collapse: collapse;
-  margin: 0;
-  font-size: 0.95em;
-}
-
-.typeset .table-wrap {
   margin: 0 0 1.1em;
-  overflow-x: auto;
+  font-size: 0.95em;
   break-inside: avoid;
 }
 
@@ -177,14 +172,6 @@ body {
     sans-serif;
   font-weight: 600;
   background: #f4f1ea;
-  text-align: left;
-}
-
-.typeset td {
-  text-align: left;
-}
-
-.typeset .align-left {
   text-align: left;
 }
 
@@ -208,11 +195,6 @@ body {
 .typeset.cols-2 h1 + p,
 .typeset.cols-2 pre,
 .typeset.cols-2 hr {
-  column-span: all;
-}
-
-.typeset.cols-2 :is(h2, h3):has(+ .table-wrap),
-.typeset.cols-2 .table-wrap {
   column-span: all;
 }
 

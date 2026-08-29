@@ -91,7 +91,6 @@ const ALLOWED_TAGS = new Set([
   'tr',
   'th',
   'td',
-  'div',
 ])
 
 interface ParsedTag {
@@ -150,8 +149,6 @@ function findProblems(html: string): string[] {
     if (!tag.closing && tag.attributes.trim() !== '') {
       if (tag.name === 'a') {
         // href は後で見る。
-      } else if (tag.name === 'div' && /^\sclass="table-wrap"$/.test(tag.attributes)) {
-        // 表の段抜き用ラッパー。
       } else if (
         (tag.name === 'th' || tag.name === 'td') &&
         /^\sclass="align-(left|center|right)"$/.test(tag.attributes)

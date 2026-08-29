@@ -229,14 +229,8 @@ body.web {
 .article table {
   width: 100%;
   border-collapse: collapse;
-  margin: 0;
-  font-size: 0.95em;
-}
-
-.article .table-wrap {
-  width: 100%;
   margin: 0 0 1.4em;
-  overflow-x: auto;
+  font-size: 0.95em;
 }
 
 .article th,
@@ -252,14 +246,6 @@ body.web {
   font-weight: 700;
   text-align: left;
   color: #222222;
-}
-
-.article td {
-  text-align: left;
-}
-
-.article .align-left {
-  text-align: left;
 }
 
 .article .align-center {
