@@ -1,171 +1,72 @@
 # kumihan
 
-GitHub Codespaces 上で Markdown 原稿を編集し、Hono が組版済み HTML を生成してブラウザで確認するための開発環境です。
+Markdown 原稿を、A4 の組版・2段組・Web 記事の 3 つの見た目でプレビューし、静的 HTML に書き出すツールです。
 
-個人または小規模な執筆・組版作業を対象にした v0.1 です。VS Code Extension、CMS、データベース、独自デプロイ基盤は含みません。
-
-ツールチェーンは [Vite+](https://viteplus.dev/)（`vp`）と [Bun](https://bun.sh/) です。CI は GitHub Actions で、`actionlint` と `zizmor` がワークフローを検査し、Semgrep・Gitleaks・`bun audit` がセキュリティ検査を行います。テストカバレッジは `src/**` に対して 95% 以上を要求します。
+個人または小規模な執筆を対象にした v0.1 です。VS Code Extension、CMS、データベースは含みません。編集は手元のエディタで行い、ブラウザは表示だけです。
 
 ```
-VS Code
+原稿.md
   │
-  │ edit
-  ▼
-content/index.md
-  │
-  ├───────────────┐
-  │               │
-  ▼               ▼
-Hono Preview              Static Export
-  │                         │
-  ├ /            1段組      ├ dist/index.html
-  ├ /magazine.html 2段組    ├ dist/magazine.html
-  └ /web.html      Web      ├ dist/web.html
-                            └ dist/assets/*
-                                  │
-                                  ▼
-                             GitHub Pages
+  ├─ 組版     A4 1段組（明朝本文）
+  ├─ 2段      A4 縦2列
+  └─ Web      画面幅に合わせた記事
+         │
+         ▼
+   HTML + CSS（プレビュー / dist/）
 ```
 
-## 使い方
+## はじめ方
 
-前提:
-
-```bash
-# Vite+（vp）
-curl -fsSL https://vite.plus | bash
-
-# Bun 1.4.0（vp が packageManager から入れる場合もあります）
-curl -fsSL https://bun.sh/install | bash
-```
-
-### GitHub Codespaces
-
-1. このリポジトリを Codespaces で開く
-2. Dev Container が Bun と Vite+ を用意し、`vp install --frozen-lockfile` を実行する
-3. ターミナルで `bun run dev` を実行する
-4. Forwarded Port `3000`（Typeset Preview）をブラウザで開く
-5. `content/index.md` を編集して保存し、ブラウザを再読み込みする
-
-### ローカル
-
-```bash
-vp install
-bun run dev
-```
-
-http://127.0.0.1:3000 を開きます。
-
-`bun run dev` は編集中の原稿をそのまま返すため、既定ではループバック（`127.0.0.1`）だけに待ち受けます。Codespaces と Dev Container のポート転送はこれで届きます。同じ LAN の別端末から見たいときだけ `KUMIHAN_HOST=0.0.0.0 bun run dev` のように明示してください。
-
-### ベンチマーク
-
-組版パイプラインの処理時間を計測します。
-
-```bash
-bun run bench                          # 既定は 50 回 × 40 倍の原稿
-bun run bench -- --iterations 300 --scale 100
-```
-
-`content/index.md` を `--scale` 倍に増幅した原稿を使い、`escapeHtml` /
-`renderInline` / `renderMarkdown` / `renderDocument` の中央値・最小値・
-スループットを表示します。
-
-計測は JIT が温まってから始めます。暖機が足りないと桁で外れるので、反復数を
-小さくしても一定回数は空回しします。
-
-### 計測して直したこと
-
-CPU プロファイルで上から順に潰した結果です（`--iterations 600`、23KB の原稿）。
-
-| 段階                    | 前  | 後  |
-| ----------------------- | --- | --- |
-| `renderInline` (地の文) | 269 | 681 |
-| `renderInline` (記法込) | 39  | 54  |
-| `renderMarkdown`        | 38  | 75  |
-| `renderDocument`        | 41  | 82  |
-
-単位は MB/s。`GET /` の実測では 962 → 1338 req/s になります。
-
-大きかったのは 4 つです。閉じ記号の限界を毎回 `lastIndexOf` で先払いするのを
-やめて空振りしたものだけ覚える、引用の中身を `\n` でつないでから split し直す
-往復をやめる、ブロックの種類を先頭 1 文字で振り分ける、`sanitizeUrl` の走査を
-1 回にまとめる。あわせて `[a](` を並べた原稿が二乗時間になる不具合も直りました。
-
-バンドルサイズとメモリも測れます。
-
-```bash
-bun run bench:size                     # バンドルの生 / minify / gzip とモジュール内訳
-bun run bench:size -- --binary         # スタンドアロン実行ファイルのサイズも測る
-bun run bench:memory                   # 既定は 400 倍の原稿
-bun run bench:memory -- --scale 2000
-```
-
-`bench:size` は `src/cli.ts` を 1 ファイルへバンドルし、どのモジュールが
-何バイト占めているかを降順で出します。`bench:memory` は変換の段階ごとに
-RSS のピークと保持ヒープを測ります。RSS は別スレッドから 1ms 間隔で採るので、
-同期処理の途中の山も拾えます。どちらも `--json` で機械可読な出力になります。
-
-### スタンドアロン実行ファイル
-
-[Releases](https://github.com/watany-dev/kumihan/releases) からバイナリを落とすか、`bun run compile` で今のマシン向けに作ります。`v*.*.*` タグで全 OS 分が Release に載ります。
+[Releases](https://github.com/watany-dev/kumihan/releases) から実行ファイルを落とします。
 
 ```bash
 curl -fsSL -o kumihan \
   https://github.com/watany-dev/kumihan/releases/latest/download/kumihan-linux-x64
 chmod +x kumihan
 ./kumihan serve manuscript.md
+```
+
+ブラウザで http://127.0.0.1:3000 を開き、右上から表示モードを切り替えます。保存した原稿は、ページを再読み込みすると反映されます。
+
+```bash
 ./kumihan export manuscript.md --out dist
 ```
 
-`bun run compile -- --all` で Linux / macOS / Windows 向けを `dist-bin/` に出します。macOS で隔離されるときは `xattr -d com.apple.quarantine kumihan-darwin-arm64`。既定は `127.0.0.1:3000`、Codespaces では `--host 0.0.0.0`。
+| ファイル                                      | 対象    |
+| --------------------------------------------- | ------- |
+| `kumihan-linux-x64` / `kumihan-linux-arm64`   | Linux   |
+| `kumihan-darwin-x64` / `kumihan-darwin-arm64` | macOS   |
+| `kumihan-windows-x64.exe`                     | Windows |
 
-## コマンド
+macOS で隔離されるときは `xattr -d com.apple.quarantine kumihan-darwin-arm64` を実行してください。既定の待ち受けは `127.0.0.1:3000` です。ポートやホストを変えるときは `--port` / `--host` を付けます。
 
-| コマンド                   | 内容                                           |
-| -------------------------- | ---------------------------------------------- |
-| `bun run dev`              | Preview server を起動する                      |
-| `bun run bench`            | 組版パイプラインの処理時間を測る               |
-| `bun run bench:size`       | バンドルサイズとモジュール内訳を測る           |
-| `bun run bench:memory`     | 変換段階ごとの RSS ピークを測る                |
-| `bun run compile`          | 今の OS 向けスタンドアロン実行ファイルを作る   |
-| `bun run compile -- --all` | Linux / macOS / Windows 向けバイナリを作る     |
-| `vp check`                 | フォーマット・lint（警告もエラー）・型チェック |
-| `vp test`                  | parser / renderer / HTTP のテストとファジング  |
-| `vp test --coverage`       | 同上。`src/**` のカバレッジ 95% を要求する     |
-| `bun run export`           | `dist/*.html` と CSS を生成する                |
-| `bun audit`                | 依存関係の脆弱性を検査する                     |
+## このリポジトリで書く
 
-テストには、記法を機械的に組み合わせて出力の性質を確かめるファジングが含まれます（種は固定なので再現します）。表・強制改行・3 つの表示モードといった v0.1.0 以降の機能を狙った 10,000 件を毎回流し、HTML の入れ子とエスケープ、表の列数、本文が消えないこと、入力の長さに対して処理時間が線形であること、そして Host ヘッダやリクエストターゲットが何であっても 5xx を返さないことを見ています。
+原稿の置き場は `content/index.md` です。履歴は Git に任せます。
 
-`vp fmt` / `vp lint` で個別にも実行できます。Oxlint は `correctness` と `suspicious` を error、`perf` を warn とし、`denyWarnings` で警告も CI を失敗させます。eval・`javascript:` URL・import cycle などのセキュリティ規則は個別に error です。Oxfmt は `printWidth: 100`、単一引用符、セミコロンなし、import 整列を強制します。
+### GitHub Codespaces
 
-## HTTP
+1. このリポジトリを Codespaces で開く
+2. ターミナルで `bun run dev` を実行する
+3. Forwarded Port `3000`（Typeset Preview）をブラウザで開く
+4. `content/index.md` を編集して保存し、ブラウザを再読み込みする
 
-| 経路                      | 内容                                            |
-| ------------------------- | ----------------------------------------------- |
-| `GET /`                   | `content/index.md` を読み、A4 1段組 HTML を返す |
-| `GET /magazine.html`      | 同じ原稿を A4 2段組（約 40 行で頁分け）で返す   |
-| `GET /magazine`           | `/magazine.html` と同じ                         |
-| `GET /web.html`           | 同じ原稿を Web 記事スタイルで返す               |
-| `GET /web`                | `/web.html` と同じ Web 記事ビュー               |
-| `GET /health`             | `{ "ok": true }`                                |
-| `GET /assets/typeset.css` | 組版 CSS（1段 / 2段）                           |
-| `GET /assets/web.css`     | Web 記事 CSS                                    |
+### ローカル
 
-`GET /` は毎回ファイルを読み直し、`Cache-Control: no-store` で返します。v0.1 の live reload はブラウザの手動更新です。
+[Vite+](https://viteplus.dev/)（`vp`）と [Bun](https://bun.sh/) 1.4.0 が必要です。
 
-すべての応答に Content-Security-Policy（`script-src 'none'`）、`X-Frame-Options: DENY`、`X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer`、Permissions-Policy を付けます。静的 HTML にも同じ CSP を `<meta>` で埋めます。
+```bash
+curl -fsSL https://vite.plus | bash
+curl -fsSL https://bun.sh/install | bash
+vp install
+bun run dev
+```
 
-原稿が無い場合は分かりやすい 404 HTML を返します。読み込み失敗時は 500 を返し、stack trace はブラウザへ出しません。
+http://127.0.0.1:3000 を開きます。同じ LAN の別端末から見たいときだけ `KUMIHAN_HOST=0.0.0.0 bun run dev` のように明示してください。
 
-`CONNECT` / `TRACE` / `TRACK` は `405` で断ります。fetch の `Request` はこの 3 つを組み立てられないため、そのまま通すと例外になり 500 になってしまうためです。`kumihan serve` が listen に失敗したとき（ポートが埋まっている、ホスト名を解決できない、など）は、内部のスタックではなく理由を 1 行で表示して終了します。
+## 原稿
 
-## Markdown
-
-初期版で扱う原稿は `content/index.md` のみです。履歴は Git に任せます。
-
-対応:
+対応している記法:
 
 - `#` / `##` / `###` 見出し
 - 段落
@@ -177,35 +78,29 @@ chmod +x kumihan
 - フェンス付きコードブロック
 - パイプ区切りの表（揃えの `:` とセル内の `\|` を含む）
 
-非対応: raw HTML、入れ子リスト、footnote、task list、image、MDX、frontmatter、syntax highlighting。
+使えないもの: raw HTML、入れ子リスト、footnote、task list、image、MDX、frontmatter、syntax highlighting。
 
-HTML は必ず escape します。リンクは `https:` / `http:` / `mailto:` / 相対 URL / `#fragment` のみ許可し、`javascript:` などは安全な値へ置き換えます。
+HTML は escape します。リンクは `https:` / `http:` / `mailto:` / 相対 URL / `#fragment` だけ通し、`javascript:` などは無効にします。
 
-日本語の soft line break では不要な半角空白を入れません。行末2スペースは明示的な改行です。
+日本語の改行では不要な半角空白を入れません。行末 2 スペースは明示的な改行です。
 
-## 組版
+## 表示モード
 
-Preview の既定表示は A4 の1段組です。本文は明朝、見出しはゴシック、code は等幅です。印刷時は `@page { size: A4; }` を使います。
+| モード | アドレス         | 見た目                                                                                      |
+| ------ | ---------------- | ------------------------------------------------------------------------------------------- |
+| 組版   | `/`              | A4 1段組。本文は明朝、見出しはゴシック、code は等幅。印刷は A4                              |
+| 2段    | `/magazine.html` | 同じ原稿を A4 縦2列にする。見出し・リード・コードは全幅。長いときはおよそ 40 行ごとに頁分け |
+| Web    | `/web.html`      | 画面幅に合わせた記事。本文はゴシック                                                        |
 
-`/magazine.html` は同じ原稿を A4 の縦2列にします。見出し・リード・コードは全幅、本文が2段です。内容が長いときはおよそ 40 行ごとに頁を分け、画面上でも印刷時でも A4 が積み重なります。切り替えは右上（Web ではヘッダー）の表示モードから行い、JavaScript は使いません。
+切り替えは右上（Web ではヘッダー）から行います。JavaScript は使いません。2段組は画面上でも印刷時でも A4 が積み重なります。v0.1 の live reload はブラウザの手動更新です。
 
-## Web 記事
-
-`/web.html` は同じ Markdown を、技術メディアの Web 記事に近い画面組で表示します。本文はゴシック、見出しにアクセント、画面幅に合わせた読み幅です。
-
-参考にした画面の骨格は [CodeZine の記事ページ](https://codezine.jp/article/detail/23908) です。ロゴやナビは複製せず、読み幅・ゴシック本文・左アクセントの見出しなど記事本文の組だけを取り入れています。
-
-Web 側に editor textarea はありません。編集は VS Code で行います。
-
-## 静的書き出しと GitHub Pages
-
-Preview と公開版は同じ `renderMarkdown()` / `renderDocument()` を使います。
+## 書き出しと GitHub Pages
 
 ```bash
+./kumihan export manuscript.md --out dist
+# リポジトリの原稿なら
 bun run export
 ```
-
-生成物:
 
 ```
 dist/
@@ -217,28 +112,15 @@ dist/
    └─ web.css
 ```
 
-`main` への push で GitHub Actions が `vp install --frozen-lockfile` → `vp test` → `vp run export` → GitHub Pages へ deploy します。リポジトリの Pages 設定は **GitHub Actions** を選んでください。バージョンタグ（`v0.1.0` など）では、同じ検査のあと `bun build --compile` でスタンドアロン実行ファイルを GitHub Release に載せます。
+`main` への push で GitHub Actions が検査したあと GitHub Pages へ載せます。リポジトリの Pages 設定は **GitHub Actions** を選んでください。
 
-CI ではこれに加えて `vp check`、カバレッジ 95%、`actionlint`、`zizmor` を実行します。セキュリティ用ワークフローは Semgrep、Gitleaks、`bun audit` を weekly でも回します。GitHub Actions はコミット SHA にピン留めし、Dependabot が週次で更新します。脆弱性の報告手順は [SECURITY.md](SECURITY.md) を見てください。
+## コマンド
 
-## Public API
+| コマンド                | 内容                                                      |
+| ----------------------- | --------------------------------------------------------- |
+| `kumihan serve [file]`  | プレビューを起動する。既定の原稿は `content/index.md`     |
+| `kumihan export [file]` | `dist/*.html` と CSS を生成する。`--out` で出力先を変える |
+| `bun run dev`           | リポジトリの `content/index.md` をプレビューする          |
+| `bun run export`        | リポジトリの原稿を `dist/` へ書き出す                     |
 
-renderer は Hono と Node filesystem から独立しています。
-
-```ts
-import { renderMarkdown } from './src/markdown/render.ts'
-import { renderDocument } from './src/typesetting/render-page.ts'
-import { exportSite } from './src/export/export-site.ts'
-import { createPreviewApp } from './src/app.ts'
-
-const fragment = renderMarkdown(markdown)
-const document = renderDocument(fragment)
-const magazine = renderDocument(fragment, { mode: 'magazine' })
-const webDocument = renderDocument(fragment, { mode: 'web' })
-const assets = exportSite(markdown)
-const app = createPreviewApp({
-  source: './content/index.md',
-})
-```
-
-将来 VS Code Extension から Webview 表示する場合も、同じ renderer を再利用する想定です。
+開発（テスト、lint、ベンチ、内部 API）は [CONTRIBUTING.md](CONTRIBUTING.md) を見てください。脆弱性の報告は [SECURITY.md](SECURITY.md) です。
