@@ -38,8 +38,10 @@ const INLINE = [
   '\u0001',
   'x:',
   'javascript:',
+  '|',
+  '\\|',
 ]
-const PREFIX = ['', '# ', '## ', '### ', '> ', '>', '- ', '1. ', '```', '---', '  ', '\t']
+const PREFIX = ['', '# ', '## ', '### ', '> ', '>', '- ', '1. ', '```', '---', '  ', '\t', '| ']
 const LINE_ENDING = ['\n', '\n', '\r\n', '\r']
 
 function generate(seed: number): string {
@@ -83,6 +85,12 @@ const ALLOWED_TAGS = new Set([
   'strong',
   'em',
   'a',
+  'table',
+  'thead',
+  'tbody',
+  'tr',
+  'th',
+  'td',
 ])
 
 interface ParsedTag {
@@ -138,8 +146,17 @@ function findProblems(html: string): string[] {
     if (!ALLOWED_TAGS.has(tag.name)) {
       problems.push(`許可していないタグ: <${tag.name}>`)
     }
-    if (!tag.closing && tag.name !== 'a' && tag.attributes.trim() !== '') {
-      problems.push(`想定していない属性: ${tag.raw}`)
+    if (!tag.closing && tag.attributes.trim() !== '') {
+      if (tag.name === 'a') {
+        // href は後で見る。
+      } else if (
+        (tag.name === 'th' || tag.name === 'td') &&
+        /^\sclass="align-(left|center|right)"$/.test(tag.attributes)
+      ) {
+        // 表の揃え。
+      } else {
+        problems.push(`想定していない属性: ${tag.raw}`)
+      }
     }
     if (VOID_TAGS.has(tag.name)) {
       if (tag.closing) problems.push(`空要素の閉じタグ: ${tag.raw}`)
@@ -325,7 +342,7 @@ const SHAPES = [
   (w: string) => `${w})`,
   (w: string) => `**${w}*`,
 ]
-const LEADS = ['', '# ', '## ', '> ', '- ', '1. ', '> - ']
+const LEADS = ['', '# ', '## ', '> ', '- ', '1. ', '> - ', '| ']
 
 function buildDocument(rand: () => number): { source: string; words: string[] } {
   const words: string[] = []
