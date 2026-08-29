@@ -2,7 +2,7 @@ import { parseArgs } from 'node:util'
 
 import { createPreviewApp } from './app.js'
 import { writeExport } from './export/write-files.js'
-import { createNodeServer } from './node-server.js'
+import { createNodeServer, describeListenError } from './node-server.js'
 
 const VERSION = '0.1.0'
 const USAGE = `kumihan ${VERSION}
@@ -73,7 +73,14 @@ if (command === 'export') {
     console.error(`invalid --port: ${portValue}`)
     process.exit(1)
   }
-  createNodeServer(createPreviewApp({ source })).listen(port, host, () => {
+  const server = createNodeServer(createPreviewApp({ source }))
+  // listen の失敗は例外ではなくイベントで届きます。受け取らないと、使えない
+  // ホスト名や埋まっているポートを指定しただけで内部のスタックが出ます。
+  server.on('error', (error) => {
+    console.error(describeListenError(error, host, port))
+    process.exit(1)
+  })
+  server.listen(port, host, () => {
     const shown = host === '0.0.0.0' ? '127.0.0.1' : host
     console.log(`Typeset preview: http://${shown}:${port}`)
     console.log(`Two-column preview: http://${shown}:${port}/magazine.html`)

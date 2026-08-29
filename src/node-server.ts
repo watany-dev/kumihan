@@ -1,4 +1,4 @@
-import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import { createServer, type OutgoingHttpHeaders } from 'node:http'
 
 import type { Hono } from 'hono'
 
@@ -57,14 +57,68 @@ export function safeRequestTarget(target: string | undefined): string {
   return '/'
 }
 
+/**
+ * listen が失敗したときに出す一行の説明です。
+ *
+ * `server.listen` の失敗は 'error' イベントで届きます。受け取り手が居ないと
+ * Node はそのまま例外にするので、使えないホスト名や埋まっているポートを
+ * 指定しただけで、内部のスタックと errno が端末に出てしまいます。打ち間違いは
+ * 普通に起きるので、何が起きたかだけを短く伝えます。
+ */
+export function describeListenError(error: unknown, host: string, port: number): string {
+  const code = error instanceof Error && 'code' in error ? error.code : undefined
+  const where = `${host}:${port}`
+  if (code === 'EADDRINUSE') return `ポートが使用中です: ${where}`
+  if (code === 'EACCES') return `ポートを開けませんでした（権限がありません）: ${where}`
+  if (code === 'EADDRNOTAVAIL') return `この端末に無いアドレスです: ${host}`
+  if (code === 'ENOTFOUND' || code === 'EAI_AGAIN') return `ホスト名を解決できません: ${host}`
+  const detail = error instanceof Error ? error.message : String(error)
+  return `プレビューを開始できませんでした: ${where} (${detail})`
+}
+
+// fetch の Request は CONNECT・TRACE・TRACK を組み立てられません（仕様が
+// 禁じているメソッドです）。Node の HTTP サーバはこれらをそのまま渡してくる
+// ので、素直に Request へ流すと例外になり、プレビューが 500 と内部エラーの
+// ログを返してしまいます。プロキシ用のメソッドで原稿を返す理由も無いので、
+// Request を作る前に 405 で断ります。
+const FORBIDDEN_METHODS = new Set(['CONNECT', 'TRACE', 'TRACK'])
+
+function isForbiddenMethod(method: string): boolean {
+  return FORBIDDEN_METHODS.has(method.toUpperCase())
+}
+
+// 受け取るのは Node の req/res のうち、ここで実際に使うところだけです。
+// 何を読んで何を書くのかがそのまま型になり、テストからも組み立てられます。
+export interface NodeRequestLike {
+  headers: { host?: string | undefined }
+  method?: string | undefined
+  url?: string | undefined
+}
+
+export interface NodeResponseLike {
+  headersSent: boolean
+  statusCode: number
+  writeHead(status: number, headers?: OutgoingHttpHeaders): unknown
+  setHeader(name: string, value: string): unknown
+  end(chunk?: Buffer | string): unknown
+}
+
 export async function dispatchNodeRequest(
-  req: IncomingMessage,
-  res: ServerResponse,
+  req: NodeRequestLike,
+  res: NodeResponseLike,
   fetchImpl: (request: Request) => Promise<Response>,
 ): Promise<void> {
   try {
     const host = safeHost(req.headers.host)
     const method = req.method ?? 'GET'
+    if (isForbiddenMethod(method)) {
+      res.writeHead(405, {
+        'Content-Type': 'text/plain; charset=utf-8',
+        Allow: 'GET, HEAD',
+      })
+      res.end('Method Not Allowed')
+      return
+    }
     const target = safeRequestTarget(req.url)
     const response = await fetchImpl(new Request(`http://${host}${target}`, { method }))
     res.writeHead(response.status, Object.fromEntries(response.headers))
