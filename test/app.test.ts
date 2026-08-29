@@ -89,4 +89,29 @@ describe('preview app', () => {
     assert.match(html, /原稿が見つかりません/)
     assert.equal(html.toLowerCase().includes('enoent'), false)
   })
+
+  it('reloads html so a saved manuscript shows up, without scripts', async () => {
+    const app = createPreviewApp({ source: './content/index.md' })
+    for (const path of ['/', '/magazine.html', '/magazine', '/web.html', '/web']) {
+      const res = await app.request(path)
+      assert.equal(res.status, 200, path)
+      assert.equal(res.headers.get('Refresh'), '2', path)
+      assert.equal(res.headers.get('Cache-Control'), 'no-store', path)
+      assert.match(res.headers.get('Content-Security-Policy') ?? '', /script-src 'none'/)
+      assert.equal((await res.text()).includes('http-equiv="refresh"'), false, path)
+    }
+
+    const missing = await createPreviewApp({ source: './content/does-not-exist.md' }).request('/')
+    assert.equal(missing.status, 404)
+    assert.equal(missing.headers.get('Refresh'), '2')
+
+    const failed = await createPreviewApp({ source: './src' }).request('/')
+    assert.equal(failed.status, 500)
+    assert.equal(failed.headers.get('Refresh'), '2')
+
+    for (const path of ['/health', '/assets/typeset.css', '/assets/web.css']) {
+      const res = await app.request(path)
+      assert.equal(res.headers.get('Refresh'), null, path)
+    }
+  })
 })
