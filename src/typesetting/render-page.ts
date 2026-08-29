@@ -67,17 +67,15 @@ ${html}
 }
 
 function renderMagazinePapers(html: string): string {
-  const pages = paginateMagazine(html)
-  let papers = ''
-  for (const page of pages) {
-    const paper = `  <div class="paper">
+  return paginateMagazine(html)
+    .map(
+      (page) => `  <div class="paper">
     <article class="typeset cols-2">
 ${page}
     </article>
-  </div>`
-    papers = papers.length === 0 ? paper : `${papers}\n${paper}`
-  }
-  return papers
+  </div>`,
+    )
+    .join('\n')
 }
 
 function modeSwitcher(mode: PreviewMode): string {
