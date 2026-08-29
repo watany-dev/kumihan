@@ -33,6 +33,30 @@ export function safeHost(host: string | undefined): string {
   return host
 }
 
+// リクエストターゲットは `/path` だけではありません。HTTP/1.1 は
+// `GET http://example.com/a`（absolute-form）と `OPTIONS *`（asterisk-form）も
+// 認めていて、Node はどちらも req.url にそのまま入れてきます。`/` で
+// 始まらない値を authority の後ろに繋ぐと、URL のホストが変わったり
+// （`http://127.0.0.1` + `*` → ホスト `127.0.0.1*`）、そもそも組み立てに
+// 失敗して 500 になります。パスだけを取り出して origin-form に直します。
+export function safeRequestTarget(target: string | undefined): string {
+  if (target === undefined || target.length === 0) {
+    return '/'
+  }
+  if (target.startsWith('/')) {
+    return target
+  }
+  // absolute-form。ホストは Host ヘッダ側で決めるので、パスとクエリだけ使う。
+  if (URL.canParse(target)) {
+    const url = new URL(target)
+    if (url.protocol === 'http:' || url.protocol === 'https:') {
+      return `${url.pathname}${url.search}`
+    }
+  }
+  // asterisk-form（`OPTIONS *`）と、それ以外の解釈できない形。
+  return '/'
+}
+
 export async function dispatchNodeRequest(
   req: IncomingMessage,
   res: ServerResponse,
@@ -41,7 +65,8 @@ export async function dispatchNodeRequest(
   try {
     const host = safeHost(req.headers.host)
     const method = req.method ?? 'GET'
-    const response = await fetchImpl(new Request(`http://${host}${req.url ?? '/'}`, { method }))
+    const target = safeRequestTarget(req.url)
+    const response = await fetchImpl(new Request(`http://${host}${target}`, { method }))
     res.writeHead(response.status, Object.fromEntries(response.headers))
     res.end(Buffer.from(await response.arrayBuffer()))
   } catch (error) {

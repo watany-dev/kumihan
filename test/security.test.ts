@@ -26,28 +26,36 @@ describe('HTML escape', () => {
   })
 })
 
+// href に入った値だけを取り出します。括弧を含む URL はそもそもリンクに
+// ならず、`javascript:alert(1)` は地の文として（エスケープされた文字として）
+// 残ります。危ないのは href に入ることなので、そこだけを見ます。
+function hrefs(html: string): string[] {
+  return [...html.matchAll(/href="([^"]*)"/g)].map((match) => match[1] ?? '')
+}
+
 describe('unsafe URL rejection', () => {
   it('rejects javascript: URLs', () => {
+    assert.deepEqual(hrefs(renderMarkdown('[x](javascript:alert1)')), ['#'])
+    // 括弧つきはリンクにならないので、href そのものが生まれない。
     const html = renderMarkdown('[x](javascript:alert(1))')
-    assert.equal(html.toLowerCase().includes('javascript:'), false)
-    assert.match(html, /href="#"/)
+    assert.deepEqual(hrefs(html), [])
+    assert.equal(html.includes('<a '), false)
   })
 
   it('rejects javascript: URLs regardless of case', () => {
-    const html = renderMarkdown('[x](JavaScript:alert(1))')
-    assert.equal(html.toLowerCase().includes('javascript:'), false)
+    assert.deepEqual(hrefs(renderMarkdown('[x](JavaScript:alert1)')), ['#'])
+    assert.deepEqual(hrefs(renderMarkdown('[x](JavaScript:alert(1))')), [])
   })
 
   it('rejects data: URLs', () => {
     const html = renderMarkdown('[x](data:text/html,hello)')
-    assert.equal(html.toLowerCase().includes('data:'), false)
-    assert.match(html, /href="#"/)
+    assert.deepEqual(hrefs(html), ['#'])
+    assert.equal(html.toLowerCase().includes('href="data:'), false)
   })
 
   it('rejects vbscript: URLs', () => {
-    const html = renderMarkdown('[x](vbscript:msgbox(1))')
-    assert.equal(html.toLowerCase().includes('vbscript:'), false)
-    assert.match(html, /href="#"/)
+    assert.deepEqual(hrefs(renderMarkdown('[x](vbscript:msgbox1)')), ['#'])
+    assert.deepEqual(hrefs(renderMarkdown('[x](vbscript:msgbox(1))')), [])
   })
 
   it('escapes quotes in a URL attribute', () => {

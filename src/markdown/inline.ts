@@ -30,6 +30,7 @@ interface CloserLimits {
   double: number
   asterisk: number
   linkMid: number
+  linkEnd: number
 }
 
 function closerLimits(source: string): CloserLimits {
@@ -38,6 +39,7 @@ function closerLimits(source: string): CloserLimits {
     double: source.lastIndexOf('**'),
     asterisk: source.lastIndexOf('*'),
     linkMid: source.lastIndexOf(']('),
+    linkEnd: source.lastIndexOf(')'),
   }
 }
 
@@ -91,7 +93,7 @@ function parseMarker(
   }
 
   if (marker === BRACKET_OPEN) {
-    const link = start < limits.linkMid ? parseLink(source, start) : null
+    const link = start < limits.linkMid ? parseLink(source, start, limits) : null
     if (!link) return null
     // URL の中身も文字どおり。目印のまま sanitizeUrl へ渡すと制御文字と
     // みなされ、行またぎの URL がすべて `#` に落ちてしまいます。
@@ -114,6 +116,11 @@ function literal(text: string): string {
   return text.includes(HARD_BREAK) ? text.replaceAll(HARD_BREAK, ' ') : text
 }
 
+// URL に空白は入りません。ここを緩めると `[x](` のあとに閉じ括弧が
+// 出てくるまで、段落の何行分でも href に吸い込まれて本文が消えます。
+// 目印（強制改行）も、元は行末の空白なので同じ扱いにします。
+const URL_SEPARATOR = new RegExp(`[\\s${HARD_BREAK}]`)
+
 /**
  * 呼び出し元は `source[start]` が `[` であること、および `](` が
  * この先に残っていること（CloserLimits）を保証します。
@@ -121,15 +128,28 @@ function literal(text: string): string {
 function parseLink(
   source: string,
   start: number,
+  limits: CloserLimits,
 ): { text: string; url: string; end: number } | null {
   const mid = source.indexOf('](', start + 1)
   /* v8 ignore next -- 呼び出し元が `](` の存在を確かめている */
   if (mid === -1) return null
+  // 閉じ括弧が残っていないのに indexOf を呼ぶと、`[a](b` を並べた原稿で
+  // `[` ごとに末尾まで走ることになり二乗時間になります。
+  if (mid + 2 > limits.linkEnd) return null
   const end = source.indexOf(')', mid + 2)
+  /* v8 ignore next -- linkEnd を確かめているので必ず見つかる */
   if (end === -1) return null
+  const url = source.slice(mid + 2, end)
+  // `(` が残っているなら括弧が釣り合っていません。`[x]([y](z)` のような
+  // 書きかけを URL とみなすと、そこにあった本文ごと href に消えます。
+  if (URL_SEPARATOR.test(url) || url.includes('(')) return null
+  const text = source.slice(start + 1, mid)
+  // `]` が残っているなら、この `[` はもっと手前で閉じています。
+  // `[a] b [c](d)` の `[a] b ` までリンクの文字にしてはいけません。
+  if (text.includes(']')) return null
   return {
-    text: source.slice(start + 1, mid),
-    url: source.slice(mid + 2, end),
+    text,
+    url,
     end: end + 1,
   }
 }

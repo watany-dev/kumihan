@@ -4,7 +4,12 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { describe, it } from 'vite-plus/test'
 
 import { createPreviewApp } from '../src/app.js'
-import { createNodeServer, dispatchNodeRequest, safeHost } from '../src/node-server.js'
+import {
+  createNodeServer,
+  dispatchNodeRequest,
+  safeHost,
+  safeRequestTarget,
+} from '../src/node-server.js'
 import { DOCUMENT_CONTENT_SECURITY_POLICY } from '../src/security/headers.js'
 
 function assertSecurityHeaders(headers: Headers): void {
@@ -273,6 +278,81 @@ describe('Host header validation', () => {
       assert.equal(url.search, '?q=1', `Host: ${host}`)
       assert.equal(url.username, '', `Host: ${host}`)
     }
+  })
+
+  it('normalizes a request target that is not an origin-form path', () => {
+    // HTTP/1.1 は `OPTIONS *` と `GET http://example.com/a` も認めていて、
+    // Node はどちらも req.url にそのまま入れてくる。`/` で始まらない値を
+    // authority の後ろに繋ぐと、ホストが変わるか URL の構築が例外になる。
+    assert.equal(safeRequestTarget('/magazine.html?x=1'), '/magazine.html?x=1')
+    assert.equal(safeRequestTarget('*'), '/')
+    assert.equal(safeRequestTarget(undefined), '/')
+    assert.equal(safeRequestTarget(''), '/')
+    assert.equal(safeRequestTarget('http://evil.example.com/web.html?x=1'), '/web.html?x=1')
+    assert.equal(safeRequestTarget('https://evil.example.com/'), '/')
+    // 解釈できない形はトップに落とす。ホスト名の一部にはさせない。
+    assert.equal(safeRequestTarget('x'), '/')
+    assert.equal(safeRequestTarget('example.com:80'), '/')
+    assert.equal(safeRequestTarget('..a[:'), '/')
+  })
+
+  it('always builds the request URL from the target as intended', () => {
+    // リクエストターゲットも自由に送れるので、機械的に作って確かめます。
+    const parts = ['/', '*', '?', '#', '%', '%2e', 'a', '..', ':', '@', '[', ']', 'http://x', '\\']
+    const hosts = ['127.0.0.1', 'localhost:3000', '[::1]:3000']
+    let random = 7
+    for (let seed = 1; seed <= 2000; seed += 1) {
+      let target = ''
+      for (let p = 0; p < 1 + (random % 5); p += 1) {
+        random = (Math.imul(random, 1103515245) + 12345) & 0x7fffffff
+        target += parts[random % parts.length] ?? ''
+      }
+      const safe = safeRequestTarget(target)
+      assert.ok(safe.startsWith('/'), `target: ${target} -> ${safe}`)
+      for (const host of hosts) {
+        const url = new URL(`http://${host}${safe}`)
+        assert.equal(url.host, host, `target: ${target}`)
+      }
+    }
+  })
+
+  it('answers normally for an asterisk-form request target', async () => {
+    let seen = ''
+    await withServer(
+      (req, res) => {
+        req.url = '*'
+        void dispatchNodeRequest(req, res, async (request) => {
+          seen = new URL(request.url).pathname
+          return new Response('ok')
+        })
+      },
+      async (port) => {
+        const res = await fetch(`http://127.0.0.1:${port}/health`)
+        assert.equal(res.status, 200)
+        assert.equal(await res.text(), 'ok')
+      },
+    )
+    assert.equal(seen, '/')
+  })
+
+  it('routes an absolute-form request target by its path', async () => {
+    let seen = ''
+    await withServer(
+      (req, res) => {
+        req.url = 'http://evil.example.com/magazine.html'
+        void dispatchNodeRequest(req, res, async (request) => {
+          const url = new URL(request.url)
+          seen = url.pathname
+          return new Response('ok')
+        })
+      },
+      async (port) => {
+        const res = await fetch(`http://127.0.0.1:${port}/health`)
+        assert.equal(res.status, 200)
+        await res.text()
+      },
+    )
+    assert.equal(seen, '/magazine.html')
   })
 
   it('does not let the Host header change the routed path', async () => {

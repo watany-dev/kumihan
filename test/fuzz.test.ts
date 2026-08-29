@@ -200,6 +200,14 @@ function measureQuotedLines(lines: number): number {
   return performance.now() - started
 }
 
+function measureUnclosedLinks(count: number): number {
+  const input = '[a](b'.repeat(count)
+  renderMarkdown(input)
+  const started = performance.now()
+  renderMarkdown(input)
+  return performance.now() - started
+}
+
 function measureUnclosedBrackets(size: number): number {
   const input = '['.repeat(size)
   renderMarkdown(input)
@@ -240,14 +248,39 @@ describe('markdown fuzzing', () => {
     assert.ok(large < small * 40, `20000 文字 ${small}ms に対して 160000 文字 ${large}ms`)
   })
 
-  it('keeps a URL that spans a hard break', () => {
-    // 強制改行の目印を残したまま URL を渡すと、制御文字とみなされて
-    // すべて `#` に落ちる。改行だった場所は空白に戻す。
-    assert.equal(renderMarkdown('[a](b  \nc)'), '<p><a href="b c">a</a></p>')
-    // 通常の改行（空白でつながる場合）と同じ結果になる。
-    assert.equal(renderMarkdown('[a](b\nc)'), renderMarkdown('[a](b  \nc)'))
-    // 空白を挟んでもスキームの判定は緩まない。
-    assert.equal(renderMarkdown('[a](java  \nscript:x)'), '<p><a href="#">a</a></p>')
+  it('does not let a URL swallow the text after it', () => {
+    // URL に空白は入らない。閉じ括弧を探して段落の残りを href に
+    // 吸い込むと、そこにあった本文が出力から消えてしまう。
+    assert.equal(renderMarkdown('[x]( あ い) 続き'), '<p>[x]( あ い) 続き</p>')
+    // 行をまたいだ `(` も同じ。リンクにはならず、本文はそのまま残る。
+    assert.equal(renderMarkdown('[a](b\nc)'), '<p>[a](b c)</p>')
+    assert.equal(renderMarkdown('[a](b  \nc)'), '<p>[a](b<br>c)</p>')
+    // 空白を挟んだスキームでリンクを作らせることもできない。
+    assert.equal(renderMarkdown('[a](java  \nscript:x)'), '<p>[a](java<br>script:x)</p>')
+    // 壊れたリンクの直後にある正しいリンクは、これまでどおり組める。
+    assert.equal(
+      renderMarkdown('[a](b c) [d](https://e)'),
+      '<p>[a](b c) <a href="https://e">d</a></p>',
+    )
+  })
+
+  it('does not let unbalanced brackets stretch a link', () => {
+    // `(` が閉じていない URL は URL ではない。書きかけのリンクに
+    // 続きのリンクを飲み込ませると、そこにあった本文が消える。
+    assert.equal(
+      renderMarkdown('[あ]([い](https://e/i)'),
+      '<p>[あ](<a href="https://e/i">い</a></p>',
+    )
+    assert.equal(renderMarkdown('[a](b(c))'), '<p>[a](b(c))</p>')
+    // `[a]` はここで閉じている。後ろのリンクの文字にしてはいけない。
+    assert.equal(renderMarkdown('[a] b [c](d)'), '<p>[a] b <a href="d">c</a></p>')
+  })
+
+  it('does not scan to the end of the line for every unclosed link', () => {
+    // 閉じ括弧のない `[a](b` を並べた原稿で二乗時間にならないこと。
+    const small = Math.max(measureUnclosedLinks(10_000), 0.5)
+    const large = measureUnclosedLinks(80_000)
+    assert.ok(large < small * 40, `10000 個 ${small}ms に対して 80000 個 ${large}ms`)
   })
 
   it('does not re-scan the joined paragraph for every line', () => {
@@ -255,5 +288,88 @@ describe('markdown fuzzing', () => {
     const small = Math.max(measureQuotedLines(4_000), 0.5)
     const large = measureQuotedLines(32_000)
     assert.ok(large < small * 40, `4000 行 ${small}ms に対して 32000 行 ${large}ms`)
+  })
+})
+
+// 記法を組み合わせた原稿を作り、「本文が出力から消えていないこと」を見ます。
+// 語そのものは記号を含まないので、リンクや強調の解釈がどう転んでも、
+// 本文か href のどちらかには必ず残っていなければなりません。
+const WORDS = ['a', 'bc', 'あ', '日本', 'Z9', 'ん']
+const SHAPES = [
+  (w: string) => w,
+  (w: string) => `\`${w}\``,
+  (w: string) => `**${w}**`,
+  (w: string) => `*${w}*`,
+  (w: string) => `[${w}](https://example.com/${w})`,
+  (w: string) => `[${w}](${w})`,
+  (w: string) => `[${w}](`,
+  (w: string) => `[${w}]( ${w})`,
+  (w: string) => `${w}]`,
+  (w: string) => `${w})`,
+  (w: string) => `**${w}*`,
+]
+const LEADS = ['', '# ', '## ', '> ', '- ', '1. ', '> - ']
+
+function buildDocument(rand: () => number): { source: string; words: string[] } {
+  const words: string[] = []
+  const lines: string[] = []
+  const lineCount = 1 + Math.floor(rand() * 6)
+  for (let l = 0; l < lineCount; l += 1) {
+    let line = LEADS[Math.floor(rand() * LEADS.length)] ?? ''
+    const parts = 1 + Math.floor(rand() * 4)
+    for (let p = 0; p < parts; p += 1) {
+      const word = WORDS[Math.floor(rand() * WORDS.length)] ?? 'a'
+      const shape = SHAPES[Math.floor(rand() * SHAPES.length)] ?? ((w: string) => w)
+      words.push(word)
+      line += shape(word)
+      if (rand() < 0.4) line += ' '
+    }
+    if (rand() < 0.2) line += '  '
+    lines.push(line)
+    if (rand() < 0.3) lines.push('')
+  }
+  return { source: lines.join('\n'), words }
+}
+
+/** タグを外して地の文にする。href の中身も「残っている」とみなす。 */
+function visibleText(html: string): string {
+  return html
+    .replace(/<a href="([^"]*)">/g, ' $1 ')
+    .replace(/<[^>]*>/g, '')
+    .replaceAll('&amp;', '&')
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&quot;', '"')
+    .replaceAll('&#39;', "'")
+}
+
+describe('markdown fuzzing (本文の保存)', () => {
+  it('never drops manuscript text', () => {
+    for (let seed = 1; seed <= 2000; seed += 1) {
+      const rand = mulberry32(seed * 2654435761)
+      const { source, words } = buildDocument(rand)
+      const text = visibleText(renderMarkdown(source))
+      for (const word of words) {
+        assert.ok(
+          text.includes(word),
+          `seed ${seed}: ${JSON.stringify(word)} が消えた / 入力 ${JSON.stringify(source)}`,
+        )
+      }
+    }
+  })
+
+  it('renders blank-line separated blocks independently', () => {
+    for (let seed = 1; seed <= 2000; seed += 1) {
+      const rand = mulberry32(seed * 40503)
+      const { source } = buildDocument(rand)
+      if (source.includes('```')) continue
+      const blocks = source.split('\n\n').filter((block) => block.trim() !== '')
+      if (blocks.length < 2) continue
+      assert.equal(
+        blocks.map((block) => renderMarkdown(block)).join('\n'),
+        renderMarkdown(blocks.join('\n\n')),
+        `seed ${seed} / 入力 ${JSON.stringify(source)}`,
+      )
+    }
   })
 })
