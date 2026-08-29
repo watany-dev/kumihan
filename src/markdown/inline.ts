@@ -93,8 +93,10 @@ function parseMarker(
   if (marker === BRACKET_OPEN) {
     const link = start < limits.linkMid ? parseLink(source, start) : null
     if (!link) return null
+    // URL の中身も文字どおり。目印のまま sanitizeUrl へ渡すと制御文字と
+    // みなされ、行またぎの URL がすべて `#` に落ちてしまいます。
     return {
-      html: `<a href="${escapeHtml(sanitizeUrl(link.url))}">${renderInline(link.text)}</a>`,
+      html: `<a href="${escapeHtml(sanitizeUrl(literal(link.url)))}">${renderInline(link.text)}</a>`,
       end: link.end,
     }
   }

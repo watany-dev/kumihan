@@ -200,6 +200,41 @@ describe('Host header validation', () => {
     assert.equal(safeHost('[::1]:70000'), '127.0.0.1')
   })
 
+  it('falls back for a host the URL parser rejects', () => {
+    // 素の authority に見えても、末尾のラベルが数字だと IPv4 として
+    // 解釈され、範囲外なら URL の構築が例外になる。そのまま通すと
+    // `Host: 999.999.999.999` を送るだけで 500 になってしまう。
+    assert.equal(safeHost('999.999.999.999'), '127.0.0.1')
+    assert.equal(safeHost('a.99999'), '127.0.0.1')
+    assert.equal(safeHost('6553665536'), '127.0.0.1')
+    assert.equal(safeHost('09'), '127.0.0.1')
+    assert.equal(safeHost('0x100000000'), '127.0.0.1')
+    assert.equal(safeHost('[2560]'), '127.0.0.1')
+    // 数字を含んでも解釈できる値はそのまま通す。
+    assert.equal(safeHost('127.0.0.1'), '127.0.0.1')
+    assert.equal(safeHost('2130706433'), '2130706433')
+    assert.equal(safeHost('example1.com:3000'), 'example1.com:3000')
+  })
+
+  it('answers normally for a Host header the URL parser rejects', async () => {
+    let seen = ''
+    await withServer(
+      (req, res) => {
+        req.headers.host = '999.999.999.999'
+        void dispatchNodeRequest(req, res, async (request) => {
+          seen = new URL(request.url).host
+          return new Response('ok')
+        })
+      },
+      async (port) => {
+        const res = await fetch(`http://127.0.0.1:${port}/health`)
+        assert.equal(res.status, 200)
+        assert.equal(await res.text(), 'ok')
+        assert.equal(seen, '127.0.0.1')
+      },
+    )
+  })
+
   it('answers normally for a Host header with an out-of-range port', async () => {
     let seen = ''
     await withServer(
@@ -217,6 +252,27 @@ describe('Host header validation', () => {
         assert.equal(seen, '127.0.0.1')
       },
     )
+  })
+
+  it('always returns a host that builds the request URL as intended', () => {
+    // Host ヘッダは何でも送れるので、素の authority に見える値を機械的に
+    // 作って確かめます。URL が組み立てられること、そしてパスとクエリを
+    // 乗っ取られないこと。どちらかが崩れると 500 か経路の差し替えになります。
+    const parts = ['a', 'b', '.', ':', '0', '1', '9', '99999', '65536', '255', '256', '0x', 'ff']
+    let random = 1
+    for (let seed = 1; seed <= 2000; seed += 1) {
+      random = (Math.imul(random, 1103515245) + 12345) & 0x7fffffff
+      let host = ''
+      for (let p = 0; p < 1 + (random % 6); p += 1) {
+        random = (Math.imul(random, 1103515245) + 12345) & 0x7fffffff
+        host += parts[random % parts.length] ?? ''
+      }
+      const safe = safeHost(host)
+      const url = new URL(`http://${safe}/health?q=1`)
+      assert.equal(url.pathname, '/health', `Host: ${host}`)
+      assert.equal(url.search, '?q=1', `Host: ${host}`)
+      assert.equal(url.username, '', `Host: ${host}`)
+    }
   })
 
   it('does not let the Host header change the routed path', async () => {
