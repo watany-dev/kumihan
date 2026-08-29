@@ -1,6 +1,6 @@
 import { escapeHtml } from '../markdown/escape.js'
 import { documentSecurityMeta } from '../security/headers.js'
-import { paginateMagazine } from './paginate.js'
+import { paginateMagazine, paginatePrint } from './paginate.js'
 
 export type PreviewMode = 'print' | 'magazine' | 'web'
 
@@ -52,25 +52,21 @@ ${html}
   if (mode === 'magazine') {
     return `<body>
   ${modeSwitcher(mode)}
-${renderMagazinePapers(html)}
+${renderPapers(paginateMagazine(html), 'typeset cols-2')}
 </body>`
   }
 
   return `<body>
   ${modeSwitcher(mode)}
-  <div class="paper">
-    <article class="typeset">
-${html}
-    </article>
-  </div>
+${renderPapers(paginatePrint(html), 'typeset')}
 </body>`
 }
 
-function renderMagazinePapers(html: string): string {
-  return paginateMagazine(html)
+function renderPapers(pages: string[], articleClass: string): string {
+  return pages
     .map(
       (page) => `  <div class="paper">
-    <article class="typeset cols-2">
+    <article class="${articleClass}">
 ${page}
     </article>
   </div>`,
