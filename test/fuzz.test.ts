@@ -197,6 +197,19 @@ function findProblems(html: string): string[] {
     }
   }
 
+  // 表の行は、ヘッダと同じ数のセルを持たなければならない。
+  const tables = /<table>[\s\S]*?<\/table>/g
+  let table: RegExpExecArray | null
+  while ((table = tables.exec(html)) !== null) {
+    const rows = table[0].match(/<tr>[\s\S]*?<\/tr>/g) ?? []
+    const counts = rows.map((row) => (row.match(/<t[hd](?:\s[^>]*)?>/g) ?? []).length)
+    const head = counts[0] ?? 0
+    if (head === 0) problems.push('セルの無い表')
+    if (counts.some((count) => count !== head))
+      problems.push(`列数の揃わない表: ${counts.join(',')}`)
+    if (!table[0].includes('<thead>')) problems.push('thead の無い表')
+  }
+
   // 強制改行の内部目印が出力へ漏れていないこと。
   if (html.includes('\u0001')) {
     problems.push('内部の目印 U+0001 が出力に漏れた')
@@ -405,5 +418,207 @@ describe('markdown fuzzing (本文の保存)', () => {
         `seed ${seed} / 入力 ${JSON.stringify(source)}`,
       )
     }
+  })
+})
+
+// v0.1.0 のあとに入った記法（表・強制改行）と表示モードを狙って揺さぶります。
+// 表は行と列の数、区切り行の形、段落との境目で組み合わせが一気に増えるので、
+// 個別の期待値ではなく「表として成立しているか」を性質で確かめます。
+const TABLE_CELL = [
+  'a',
+  'bc',
+  'あ',
+  '',
+  ' ',
+  '**b**',
+  '*i*',
+  '`c`',
+  '`a|b`',
+  '[d](https://e)',
+  '[d](javascript:x)',
+  '\\|',
+  '|',
+  '<x>',
+  '&',
+  '"',
+  "'",
+  '---',
+  ':--',
+  '-:',
+  ':-:',
+  '- item',
+  '1. item',
+  '> quoted',
+  '#',
+  'x  ',
+  '\\',
+]
+const TABLE_DELIMITER = [
+  '---',
+  ':---',
+  '---:',
+  ':---:',
+  '--',
+  ':-:',
+  '- - -',
+  '',
+  ' --- ',
+  '----',
+  '::---',
+]
+const TABLE_NEIGHBOUR = ['', '# 見出し', '本文です', '- 項目', '1. 項目', '> 引用', '```', '---']
+const TABLE_LEAD = ['', '', '', '> ', '- ', '1. ', '  ', '>> ']
+
+function tableRow(rand: () => number, columns: number, cells: readonly string[]): string {
+  const parts: string[] = []
+  for (let c = 0; c < columns; c += 1) {
+    parts.push(cells[Math.floor(rand() * cells.length)] ?? 'a')
+  }
+  const lead = rand() < 0.6 ? '|' : ''
+  const tail = rand() < 0.6 ? '|' : ''
+  const pad = rand() < 0.5 ? ' ' : ''
+  return `${lead}${pad}${parts.join(`${pad}|${pad}`)}${pad}${tail}`
+}
+
+function generateTableDocument(seed: number): string {
+  const rand = mulberry32(seed)
+  const lines: string[] = []
+  const blocks = 1 + Math.floor(rand() * 3)
+  for (let b = 0; b < blocks; b += 1) {
+    const columns = 1 + Math.floor(rand() * 4)
+    const lead = TABLE_LEAD[Math.floor(rand() * TABLE_LEAD.length)] ?? ''
+    if (rand() < 0.4) lines.push(TABLE_NEIGHBOUR[Math.floor(rand() * TABLE_NEIGHBOUR.length)] ?? '')
+    lines.push(lead + tableRow(rand, columns, TABLE_CELL))
+    // 区切り行は、列数が揃うときとずれるときの両方を出す。
+    const delimiterColumns = rand() < 0.75 ? columns : 1 + Math.floor(rand() * 4)
+    lines.push(lead + tableRow(rand, delimiterColumns, TABLE_DELIMITER))
+    const bodyRows = Math.floor(rand() * 4)
+    for (let r = 0; r < bodyRows; r += 1) {
+      lines.push(lead + tableRow(rand, 1 + Math.floor(rand() * 5), TABLE_CELL))
+    }
+    if (rand() < 0.5) lines.push('')
+    if (rand() < 0.4) lines.push(TABLE_NEIGHBOUR[Math.floor(rand() * TABLE_NEIGHBOUR.length)] ?? '')
+  }
+  return lines.join(LINE_ENDING[Math.floor(rand() * LINE_ENDING.length)] ?? '\n')
+}
+
+// 文法を組まず、記号の出やすい文字を並べただけの原稿。生成規則の隙間に入る
+// 組み合わせ（`|` と `:` と `` ` `` の並びなど）はこちらで当たります。
+const NOISE = [
+  ...'|-:`*[]()#>\\ \t\n\r&<>"\'/abc012'.split(''),
+  'あ',
+  '　',
+  '\u0001',
+  '\u00a0',
+  '\u2028',
+  '\u200b',
+  '\ufeff',
+  '😀',
+  '\ud800',
+  '\udfff',
+]
+
+function generateNoise(seed: number): string {
+  const rand = mulberry32(seed)
+  const length = 1 + Math.floor(rand() * 300)
+  let source = ''
+  for (let i = 0; i < length; i += 1) {
+    source += NOISE[Math.floor(rand() * NOISE.length)] ?? 'a'
+  }
+  return source
+}
+
+function measureTableRows(rows: number): number {
+  const input = `| a | b |\n| --- | --- |\n${'| c | d |\n'.repeat(rows)}`
+  renderMarkdown(input)
+  const started = performance.now()
+  renderMarkdown(input)
+  return performance.now() - started
+}
+
+function measureTableCells(cells: number): number {
+  const input = `${'a|'.repeat(cells)}\n${'---|'.repeat(cells)}`
+  renderMarkdown(input)
+  const started = performance.now()
+  renderMarkdown(input)
+  return performance.now() - started
+}
+
+const ALIGNMENTS = ['---', ':---', '---:', ':---:']
+const CELL_SHAPES = [
+  (word: string) => word,
+  (word: string) => `**${word}**`,
+  (word: string) => `\`${word}\``,
+  (word: string) => `[${word}](https://example.com/${word})`,
+  (word: string) => `*${word}*`,
+]
+
+describe('table fuzzing', () => {
+  it('keeps a generated table well formed, escaped, and rectangular', () => {
+    for (let seed = 1; seed <= 4000; seed += 1) {
+      const source = generateTableDocument(seed * 2654435761)
+      const problems = findProblems(renderMarkdown(source))
+      assert.deepEqual(problems, [], `seed ${seed} / 入力 ${JSON.stringify(source)}`)
+    }
+  })
+
+  it('keeps every cell of a well-formed table in the output', () => {
+    // セルの中身は記号を含まない語だけにする。表として組まれようが段落へ
+    // 落ちようが、語は必ず出力のどこかに残っていなければならない。
+    for (let seed = 1; seed <= 2000; seed += 1) {
+      const rand = mulberry32(seed * 40503)
+      const columns = 1 + Math.floor(rand() * 4)
+      const words: string[] = []
+      const lines: string[] = []
+      const rows = 1 + Math.floor(rand() * 4)
+      for (let r = 0; r < rows; r += 1) {
+        const cells: string[] = []
+        // 列数を超えたセルは仕様どおり捨てられるので、ここでは超えさせない。
+        for (let c = 0; c < columns; c += 1) {
+          const word = `w${words.length}`
+          words.push(word)
+          const shape = CELL_SHAPES[Math.floor(rand() * CELL_SHAPES.length)]
+          cells.push(shape === undefined ? word : shape(word))
+        }
+        lines.push(`| ${cells.join(' | ')} |`)
+        if (r === 0) {
+          const delimiters: string[] = []
+          for (let c = 0; c < columns; c += 1) {
+            delimiters.push(ALIGNMENTS[Math.floor(rand() * ALIGNMENTS.length)] ?? '---')
+          }
+          lines.push(`| ${delimiters.join(' | ')} |`)
+        }
+      }
+      const source = lines.join('\n')
+      const text = visibleText(renderMarkdown(source))
+      for (const word of words) {
+        assert.ok(
+          text.includes(word),
+          `seed ${seed}: ${JSON.stringify(word)} が消えた / 入力 ${JSON.stringify(source)}`,
+        )
+      }
+    }
+  })
+
+  it('keeps noisy manuscripts well formed too', () => {
+    for (let seed = 1; seed <= 2000; seed += 1) {
+      const source = generateNoise(seed * 2654435761)
+      const problems = findProblems(renderMarkdown(source))
+      assert.deepEqual(problems, [], `seed ${seed} / 入力 ${JSON.stringify(source)}`)
+      assert.equal(renderMarkdown(source), renderMarkdown(source))
+    }
+  })
+
+  it('does not slow down more than linearly as a table grows', () => {
+    const smallRows = Math.max(measureTableRows(2_000), 0.5)
+    const largeRows = measureTableRows(16_000)
+    assert.ok(largeRows < smallRows * 40, `2000 行 ${smallRows}ms に対して 16000 行 ${largeRows}ms`)
+
+    const smallCells = Math.max(measureTableCells(2_000), 0.5)
+    const largeCells = measureTableCells(16_000)
+    assert.ok(
+      largeCells < smallCells * 40,
+      `2000 列 ${smallCells}ms に対して 16000 列 ${largeCells}ms`,
+    )
   })
 })

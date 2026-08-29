@@ -6,6 +6,7 @@ import { describe, it } from 'vite-plus/test'
 import { createPreviewApp } from '../src/app.js'
 import {
   createNodeServer,
+  describeListenError,
   dispatchNodeRequest,
   safeHost,
   safeRequestTarget,
@@ -53,6 +54,26 @@ function failingBodyResponse(): Response {
       },
     }),
   )
+}
+
+class RecordingResponse {
+  statusCode = 200
+  headersSent = false
+  headers: Record<string, unknown> = {}
+  body: unknown = undefined
+  writeHead(status: number, headers?: Record<string, unknown>): this {
+    this.statusCode = status
+    this.headersSent = true
+    if (headers) this.headers = headers
+    return this
+  }
+  setHeader(name: string, value: unknown): void {
+    this.headers[name] = value
+  }
+  end(chunk?: unknown): this {
+    this.body = chunk
+    return this
+  }
 }
 
 describe('preview security headers', () => {
@@ -164,6 +185,33 @@ describe('node http adapter', () => {
     )
     assert.ok(received)
     assert.equal(received.url, 'http://127.0.0.1/')
+  })
+
+  it('answers 405 instead of 500 for methods fetch refuses to build', async () => {
+    // fetch の Request は CONNECT・TRACE・TRACK を作れません。そのまま渡すと
+    // 例外になり、プレビューが 500 と内部エラーのログを返してしまいます。
+    for (const method of ['TRACE', 'CONNECT', 'TRACK', 'trace']) {
+      const res = new RecordingResponse()
+      let called = false
+      await dispatchNodeRequest({ headers: { host: '127.0.0.1' }, method, url: '/' }, res, () => {
+        called = true
+        return Promise.resolve(new Response('ok'))
+      })
+      assert.equal(res.statusCode, 405, method)
+      assert.equal(res.headers['Allow'], 'GET, HEAD')
+      assert.equal(res.body, 'Method Not Allowed')
+      assert.equal(called, false)
+    }
+  })
+
+  it('still serves the ordinary methods', async () => {
+    for (const method of ['GET', 'HEAD', 'POST', 'OPTIONS']) {
+      const res = new RecordingResponse()
+      await dispatchNodeRequest({ headers: { host: '127.0.0.1' }, method, url: '/' }, res, () =>
+        Promise.resolve(new Response('ok')),
+      )
+      assert.equal(res.statusCode, 200, method)
+    }
   })
 
   it('does not rewrite headers when the response has already started', async () => {
@@ -371,5 +419,42 @@ describe('Host header validation', () => {
       },
     )
     assert.equal(seen, '/health')
+  })
+})
+
+function errorWithCode(code: string): Error {
+  return Object.assign(new Error('boom'), { code })
+}
+
+describe('listen errors', () => {
+  it('explains why the preview could not start, without a stack trace', () => {
+    assert.equal(
+      describeListenError(errorWithCode('EADDRINUSE'), '127.0.0.1', 3000),
+      'ポートが使用中です: 127.0.0.1:3000',
+    )
+    assert.equal(
+      describeListenError(errorWithCode('EACCES'), '127.0.0.1', 80),
+      'ポートを開けませんでした（権限がありません）: 127.0.0.1:80',
+    )
+    assert.equal(
+      describeListenError(errorWithCode('EADDRNOTAVAIL'), '10.0.0.1', 3000),
+      'この端末に無いアドレスです: 10.0.0.1',
+    )
+    assert.equal(
+      describeListenError(errorWithCode('ENOTFOUND'), 'nope', 3000),
+      'ホスト名を解決できません: nope',
+    )
+    assert.equal(
+      describeListenError(errorWithCode('EAI_AGAIN'), 'nope', 3000),
+      'ホスト名を解決できません: nope',
+    )
+    assert.equal(
+      describeListenError(new Error('boom'), '127.0.0.1', 3000),
+      'プレビューを開始できませんでした: 127.0.0.1:3000 (boom)',
+    )
+    assert.equal(
+      describeListenError('boom', '127.0.0.1', 3000),
+      'プレビューを開始できませんでした: 127.0.0.1:3000 (boom)',
+    )
   })
 })

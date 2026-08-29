@@ -131,10 +131,12 @@ chmod +x kumihan
 | `bun run compile`          | 今の OS 向けスタンドアロン実行ファイルを作る   |
 | `bun run compile -- --all` | Linux / macOS / Windows 向けバイナリを作る     |
 | `vp check`                 | フォーマット・lint（警告もエラー）・型チェック |
-| `vp test`                  | parser / renderer / HTTP のテスト              |
+| `vp test`                  | parser / renderer / HTTP のテストとファジング  |
 | `vp test --coverage`       | 同上。`src/**` のカバレッジ 95% を要求する     |
 | `bun run export`           | `dist/*.html` と CSS を生成する                |
 | `bun audit`                | 依存関係の脆弱性を検査する                     |
+
+テストには、記法を機械的に組み合わせて出力の性質を確かめるファジングが含まれます（種は固定なので再現します）。表・強制改行・3 つの表示モードといった v0.1.0 以降の機能を狙った 10,000 件を毎回流し、HTML の入れ子とエスケープ、表の列数、本文が消えないこと、入力の長さに対して処理時間が線形であること、そして Host ヘッダやリクエストターゲットが何であっても 5xx を返さないことを見ています。
 
 `vp fmt` / `vp lint` で個別にも実行できます。Oxlint は `correctness` と `suspicious` を error、`perf` を warn とし、`denyWarnings` で警告も CI を失敗させます。eval・`javascript:` URL・import cycle などのセキュリティ規則は個別に error です。Oxfmt は `printWidth: 100`、単一引用符、セミコロンなし、import 整列を強制します。
 
@@ -156,6 +158,8 @@ chmod +x kumihan
 すべての応答に Content-Security-Policy（`script-src 'none'`）、`X-Frame-Options: DENY`、`X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer`、Permissions-Policy を付けます。静的 HTML にも同じ CSP を `<meta>` で埋めます。
 
 原稿が無い場合は分かりやすい 404 HTML を返します。読み込み失敗時は 500 を返し、stack trace はブラウザへ出しません。
+
+`CONNECT` / `TRACE` / `TRACK` は `405` で断ります。fetch の `Request` はこの 3 つを組み立てられないため、そのまま通すと例外になり 500 になってしまうためです。`kumihan serve` が listen に失敗したとき（ポートが埋まっている、ホスト名を解決できない、など）は、内部のスタックではなく理由を 1 行で表示して終了します。
 
 ## Markdown
 
