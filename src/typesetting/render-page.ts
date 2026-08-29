@@ -1,5 +1,6 @@
 import { escapeHtml } from '../markdown/escape.js'
 import { documentSecurityMeta } from '../security/headers.js'
+import { paginateMagazine } from './paginate.js'
 
 export type PreviewMode = 'print' | 'magazine' | 'web'
 
@@ -48,15 +49,33 @@ ${html}
 </body>`
   }
 
-  const cols = mode === 'magazine' ? ' cols-2' : ''
+  if (mode === 'magazine') {
+    return `<body>
+  ${modeSwitcher(mode)}
+${renderMagazinePapers(html)}
+</body>`
+  }
+
   return `<body>
   ${modeSwitcher(mode)}
   <div class="paper">
-    <article class="typeset${cols}">
+    <article class="typeset">
 ${html}
     </article>
   </div>
 </body>`
+}
+
+function renderMagazinePapers(html: string): string {
+  return paginateMagazine(html)
+    .map(
+      (page) => `  <div class="paper">
+    <article class="typeset cols-2">
+${page}
+    </article>
+  </div>`,
+    )
+    .join('\n')
 }
 
 function modeSwitcher(mode: PreviewMode): string {

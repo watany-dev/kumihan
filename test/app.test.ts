@@ -24,6 +24,8 @@ describe('preview app', () => {
     const css = await res.text()
     assert.equal(css, typesetCss)
     assert.match(css, /column-count:\s*2/)
+    assert.match(css, /height:\s*calc\(40 \* 1\.75em\)/)
+    assert.match(css, /break-after:\s*page/)
   })
 
   it('serves web article css', async () => {
