@@ -20,29 +20,35 @@ function nextMarkerIndex(source: string, from: number): number {
 }
 
 /**
- * 閉じ記号が「これ以降には存在しない」位置。閉じ記号を探す indexOf は
- * 見つからないと末尾まで走るので、閉じられない記号が並んだ原稿
- * （`[[[[…`）では 1 文字ごとに全体を走査して二乗時間になります。
- * 最後の出現位置を一度だけ求めておき、その先では探索を省きます。
+ * 閉じ記号を探す indexOf は、見つからないと末尾まで走ります。閉じられない
+ * 記号が並んだ原稿（`[[[[…`）では 1 文字ごとに全体を走査して二乗時間に
+ * なるため、空振りした記号を覚えておき、その先では探索そのものを省きます。
+ *
+ * 「位置 x から見つからなければ x より後ろのどこからでも見つからない」ので、
+ * この記憶は探索を省いても結果を変えません。記号ごとに空振りは高々 1 回で、
+ * 全体の走査量は原稿の長さに比例したままです。
+ *
+ * 開始時に lastIndexOf でまとめて限界位置を求める手もありますが、それだと
+ * 空振りが 1 度も起きない普通の原稿でも毎回 4 回の全走査を先払いになります。
+ * renderInline は強調やリンクの中身で再帰するので、この先払いは短い断片ごとに
+ * 積み上がります。実測ではここが全体の約 2 割を占めていました。
  */
-interface CloserLimits {
-  backtick: number
-  double: number
-  asterisk: number
-  linkMid: number
-}
-
-function closerLimits(source: string): CloserLimits {
-  return {
-    backtick: source.lastIndexOf('`'),
-    double: source.lastIndexOf('**'),
-    asterisk: source.lastIndexOf('*'),
-    linkMid: source.lastIndexOf(']('),
-  }
+interface ClosersExhausted {
+  backtick: boolean
+  double: boolean
+  asterisk: boolean
+  linkMid: boolean
+  linkEnd: boolean
 }
 
 export function renderInline(source: string): string {
-  const limits = closerLimits(source)
+  const exhausted: ClosersExhausted = {
+    backtick: false,
+    double: false,
+    asterisk: false,
+    linkMid: false,
+    linkEnd: false,
+  }
   let i = 0
   let html = ''
 
@@ -56,7 +62,7 @@ export function renderInline(source: string): string {
 
     // ここに来る文字は必ず `\``・`[`・`*` のいずれかなので、
     // 対応する記法だけを試します。
-    const parsed = parseMarker(source, i, limits)
+    const parsed = parseMarker(source, i, exhausted)
     if (parsed) {
       html += parsed.html
       i = parsed.end
@@ -80,18 +86,18 @@ function renderText(text: string): string {
 function parseMarker(
   source: string,
   start: number,
-  limits: CloserLimits,
+  exhausted: ClosersExhausted,
 ): { html: string; end: number } | null {
   const marker = source.charCodeAt(start)
 
   if (marker === BACKTICK) {
-    const code = start < limits.backtick ? parseDelimited(source, start, '`') : null
+    const code = parseDelimited(source, start, '`', exhausted, 'backtick')
     // コードスパンの中身は文字どおり。改行だった場所は空白に戻します。
     return code ? { html: `<code>${escapeHtml(literal(code.text))}</code>`, end: code.end } : null
   }
 
   if (marker === BRACKET_OPEN) {
-    const link = start < limits.linkMid ? parseLink(source, start) : null
+    const link = parseLink(source, start, exhausted)
     if (!link) return null
     // URL の中身も文字どおり。目印のまま sanitizeUrl へ渡すと制御文字と
     // みなされ、行またぎの URL がすべて `#` に落ちてしまいます。
@@ -101,12 +107,12 @@ function parseMarker(
     }
   }
 
-  const strong = start + 2 <= limits.double ? parseDelimited(source, start, '**') : null
+  const strong = parseDelimited(source, start, '**', exhausted, 'double')
   if (strong) {
     return { html: `<strong>${renderInline(strong.text)}</strong>`, end: strong.end }
   }
 
-  const emphasis = start < limits.asterisk ? parseDelimited(source, start, '*') : null
+  const emphasis = parseDelimited(source, start, '*', exhausted, 'asterisk')
   return emphasis ? { html: `<em>${renderInline(emphasis.text)}</em>`, end: emphasis.end } : null
 }
 
@@ -115,18 +121,31 @@ function literal(text: string): string {
 }
 
 /**
- * 呼び出し元は `source[start]` が `[` であること、および `](` が
- * この先に残っていること（CloserLimits）を保証します。
+ * 呼び出し元は `source[start]` が `[` であることを保証します。
+ *
+ * `](` と `)` を別々に覚えるのは、`[a](` を並べた原稿だと `](` は毎回すぐ
+ * 見つかる一方で `)` の探索だけが末尾まで空振りし、そこだけが二乗時間に
+ * なるためです。
  */
 function parseLink(
   source: string,
   start: number,
+  exhausted: ClosersExhausted,
 ): { text: string; url: string; end: number } | null {
+  if (exhausted.linkMid || exhausted.linkEnd) return null
+
   const mid = source.indexOf('](', start + 1)
-  /* v8 ignore next -- 呼び出し元が `](` の存在を確かめている */
-  if (mid === -1) return null
+  if (mid === -1) {
+    exhausted.linkMid = true
+    return null
+  }
+
   const end = source.indexOf(')', mid + 2)
-  if (end === -1) return null
+  if (end === -1) {
+    exhausted.linkEnd = true
+    return null
+  }
+
   return {
     text: source.slice(start + 1, mid),
     url: source.slice(mid + 2, end),
@@ -138,10 +157,21 @@ function parseDelimited(
   source: string,
   start: number,
   delimiter: string,
+  exhausted: ClosersExhausted,
+  key: 'backtick' | 'double' | 'asterisk',
 ): { text: string; end: number } | null {
+  if (exhausted[key]) return null
   if (!source.startsWith(delimiter, start)) return null
+
   const close = source.indexOf(delimiter, start + delimiter.length)
-  if (close === -1 || close === start + delimiter.length) return null
+  if (close === -1) {
+    exhausted[key] = true
+    return null
+  }
+  // 空の記法（`**` や `` `` ``）は記法として成立しませんが、閉じ記号自体は
+  // 見つかっているので「もう無い」とは記録しません。
+  if (close === start + delimiter.length) return null
+
   return {
     text: source.slice(start + delimiter.length, close),
     end: close + delimiter.length,
