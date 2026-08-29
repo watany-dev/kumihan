@@ -219,7 +219,7 @@ function renderTable(
     html += '\n</tbody>'
   }
 
-  return `${html}\n</table>`
+  return `<div class="table-wrap">\n${html}\n</table>\n</div>`
 }
 
 function renderCells(

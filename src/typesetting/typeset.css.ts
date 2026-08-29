@@ -152,8 +152,13 @@ body {
 .typeset table {
   width: 100%;
   border-collapse: collapse;
-  margin: 0 0 1.1em;
+  margin: 0;
   font-size: 0.95em;
+}
+
+.typeset .table-wrap {
+  margin: 0 0 1.1em;
+  overflow-x: auto;
   break-inside: avoid;
 }
 
@@ -202,8 +207,12 @@ body {
 .typeset.cols-2 h1,
 .typeset.cols-2 h1 + p,
 .typeset.cols-2 pre,
-.typeset.cols-2 table,
 .typeset.cols-2 hr {
+  column-span: all;
+}
+
+.typeset.cols-2 :is(h2, h3):has(+ .table-wrap),
+.typeset.cols-2 .table-wrap {
   column-span: all;
 }
 

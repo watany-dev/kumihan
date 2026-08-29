@@ -5,6 +5,10 @@ import { describe, it } from 'vite-plus/test'
 import { renderMarkdown } from '../src/markdown/render.js'
 import { parseAlignments, splitTableRow } from '../src/markdown/table.js'
 
+function tableHtml(...lines: string[]): string {
+  return ['<div class="table-wrap">', ...lines, '</div>'].join('\n')
+}
+
 describe('splitTableRow', () => {
   it('returns no cells for a blank line', () => {
     assert.deepEqual(splitTableRow(''), [])
@@ -52,7 +56,7 @@ describe('renderMarkdown tables', () => {
     const source = ['| 項目 | 値', '| --- | ---', '| 名前 | 太郎'].join('\n')
     assert.equal(
       renderMarkdown(source),
-      [
+      tableHtml(
         '<table>',
         '<thead>',
         '<tr><th>項目</th><th>値</th></tr>',
@@ -61,7 +65,7 @@ describe('renderMarkdown tables', () => {
         '<tr><td>名前</td><td>太郎</td></tr>',
         '</tbody>',
         '</table>',
-      ].join('\n'),
+      ),
     )
   })
 
@@ -69,7 +73,7 @@ describe('renderMarkdown tables', () => {
     const source = ['項目 | 値', '--- | ---', '名前 | 太郎'].join('\n')
     assert.equal(
       renderMarkdown(source),
-      [
+      tableHtml(
         '<table>',
         '<thead>',
         '<tr><th>項目</th><th>値</th></tr>',
@@ -78,7 +82,7 @@ describe('renderMarkdown tables', () => {
         '<tr><td>名前</td><td>太郎</td></tr>',
         '</tbody>',
         '</table>',
-      ].join('\n'),
+      ),
     )
   })
 
@@ -86,7 +90,7 @@ describe('renderMarkdown tables', () => {
     const source = ['| `open | x |', '| --- | --- |', '| y | close` |'].join('\n')
     assert.equal(
       renderMarkdown(source),
-      [
+      tableHtml(
         '<table>',
         '<thead>',
         '<tr><th>`open</th><th>x</th></tr>',
@@ -95,7 +99,7 @@ describe('renderMarkdown tables', () => {
         '<tr><td>y</td><td>close`</td></tr>',
         '</tbody>',
         '</table>',
-      ].join('\n'),
+      ),
     )
   })
 
@@ -107,7 +111,7 @@ describe('renderMarkdown tables', () => {
     ].join('\n')
     assert.equal(
       renderMarkdown(source),
-      [
+      tableHtml(
         '<table>',
         '<thead>',
         '<tr><th><strong>太</strong></th><th><em>斜</em></th><th><code>code</code></th></tr>',
@@ -116,7 +120,7 @@ describe('renderMarkdown tables', () => {
         '<tr><td><a href="https://example.com">link</a></td><td>a</td><td>b</td></tr>',
         '</tbody>',
         '</table>',
-      ].join('\n'),
+      ),
     )
   })
 
@@ -124,7 +128,7 @@ describe('renderMarkdown tables', () => {
     const source = ['| l | c | r |', '| :--- | :---: | ---: |', '| a | b | c |'].join('\n')
     assert.equal(
       renderMarkdown(source),
-      [
+      tableHtml(
         '<table>',
         '<thead>',
         '<tr><th class="align-left">l</th><th class="align-center">c</th><th class="align-right">r</th></tr>',
@@ -133,7 +137,7 @@ describe('renderMarkdown tables', () => {
         '<tr><td class="align-left">a</td><td class="align-center">b</td><td class="align-right">c</td></tr>',
         '</tbody>',
         '</table>',
-      ].join('\n'),
+      ),
     )
   })
 
@@ -143,7 +147,7 @@ describe('renderMarkdown tables', () => {
     )
     assert.equal(
       renderMarkdown(source),
-      [
+      tableHtml(
         '<table>',
         '<thead>',
         '<tr><th>a</th><th>b</th><th>c</th></tr>',
@@ -153,14 +157,14 @@ describe('renderMarkdown tables', () => {
         '<tr><td>1</td><td>2</td><td>3</td></tr>',
         '</tbody>',
         '</table>',
-      ].join('\n'),
+      ),
     )
   })
 
   it('omits tbody when there are no data rows', () => {
     assert.equal(
       renderMarkdown('| a | b |\n| --- | --- |'),
-      ['<table>', '<thead>', '<tr><th>a</th><th>b</th></tr>', '</thead>', '</table>'].join('\n'),
+      tableHtml('<table>', '<thead>', '<tr><th>a</th><th>b</th></tr>', '</thead>', '</table>'),
     )
   })
 
@@ -169,22 +173,26 @@ describe('renderMarkdown tables', () => {
     assert.equal(
       renderMarkdown(source),
       [
-        '<table>',
-        '<thead>',
-        '<tr><th>a</th></tr>',
-        '</thead>',
-        '<tbody>',
-        '<tr><td>1</td></tr>',
-        '</tbody>',
-        '</table>',
-        '<table>',
-        '<thead>',
-        '<tr><th>b</th></tr>',
-        '</thead>',
-        '<tbody>',
-        '<tr><td>2</td></tr>',
-        '</tbody>',
-        '</table>',
+        tableHtml(
+          '<table>',
+          '<thead>',
+          '<tr><th>a</th></tr>',
+          '</thead>',
+          '<tbody>',
+          '<tr><td>1</td></tr>',
+          '</tbody>',
+          '</table>',
+        ),
+        tableHtml(
+          '<table>',
+          '<thead>',
+          '<tr><th>b</th></tr>',
+          '</thead>',
+          '<tbody>',
+          '<tr><td>2</td></tr>',
+          '</tbody>',
+          '</table>',
+        ),
       ].join('\n'),
     )
   })
@@ -199,14 +207,16 @@ describe('renderMarkdown tables', () => {
       renderMarkdown(source),
       [
         '<p>導入です。</p>',
-        '<table>',
-        '<thead>',
-        '<tr><th>a</th><th>b</th></tr>',
-        '</thead>',
-        '<tbody>',
-        '<tr><td>c</td><td>d</td></tr>',
-        '</tbody>',
-        '</table>',
+        tableHtml(
+          '<table>',
+          '<thead>',
+          '<tr><th>a</th><th>b</th></tr>',
+          '</thead>',
+          '<tbody>',
+          '<tr><td>c</td><td>d</td></tr>',
+          '</tbody>',
+          '</table>',
+        ),
       ].join('\n'),
     )
   })
@@ -215,14 +225,16 @@ describe('renderMarkdown tables', () => {
     assert.equal(
       renderMarkdown('| a |\n| --- |\n| b |\n- item'),
       [
-        '<table>',
-        '<thead>',
-        '<tr><th>a</th></tr>',
-        '</thead>',
-        '<tbody>',
-        '<tr><td>b</td></tr>',
-        '</tbody>',
-        '</table>',
+        tableHtml(
+          '<table>',
+          '<thead>',
+          '<tr><th>a</th></tr>',
+          '</thead>',
+          '<tbody>',
+          '<tr><td>b</td></tr>',
+          '</tbody>',
+          '</table>',
+        ),
         '<ul>',
         '<li>item</li>',
         '</ul>',
@@ -230,21 +242,21 @@ describe('renderMarkdown tables', () => {
     )
     assert.equal(
       renderMarkdown('| a |\n| --- |\n# Next'),
-      ['<table>', '<thead>', '<tr><th>a</th></tr>', '</thead>', '</table>', '<h1>Next</h1>'].join(
-        '\n',
-      ),
+      `${tableHtml('<table>', '<thead>', '<tr><th>a</th></tr>', '</thead>', '</table>')}\n<h1>Next</h1>`,
     )
     assert.equal(
       renderMarkdown('| a |\n| --- |\n| b |\n1. item'),
       [
-        '<table>',
-        '<thead>',
-        '<tr><th>a</th></tr>',
-        '</thead>',
-        '<tbody>',
-        '<tr><td>b</td></tr>',
-        '</tbody>',
-        '</table>',
+        tableHtml(
+          '<table>',
+          '<thead>',
+          '<tr><th>a</th></tr>',
+          '</thead>',
+          '<tbody>',
+          '<tr><td>b</td></tr>',
+          '</tbody>',
+          '</table>',
+        ),
         '<ol>',
         '<li>item</li>',
         '</ol>',
@@ -252,23 +264,12 @@ describe('renderMarkdown tables', () => {
     )
     assert.equal(
       renderMarkdown('| a |\n| --- |\n```\ncode\n```'),
-      [
-        '<table>',
-        '<thead>',
-        '<tr><th>a</th></tr>',
-        '</thead>',
-        '</table>',
-        '<pre><code>code</code></pre>',
-      ].join('\n'),
+      `${tableHtml('<table>', '<thead>', '<tr><th>a</th></tr>', '</thead>', '</table>')}\n<pre><code>code</code></pre>`,
     )
     assert.equal(
       renderMarkdown('| a |\n| --- |\n> quoted'),
       [
-        '<table>',
-        '<thead>',
-        '<tr><th>a</th></tr>',
-        '</thead>',
-        '</table>',
+        tableHtml('<table>', '<thead>', '<tr><th>a</th></tr>', '</thead>', '</table>'),
         '<blockquote>',
         '<p>quoted</p>',
         '</blockquote>',
@@ -282,14 +283,16 @@ describe('renderMarkdown tables', () => {
       renderMarkdown(source),
       [
         '<blockquote>',
-        '<table>',
-        '<thead>',
-        '<tr><th>a</th><th>b</th></tr>',
-        '</thead>',
-        '<tbody>',
-        '<tr><td>c</td><td>d</td></tr>',
-        '</tbody>',
-        '</table>',
+        tableHtml(
+          '<table>',
+          '<thead>',
+          '<tr><th>a</th><th>b</th></tr>',
+          '</thead>',
+          '<tbody>',
+          '<tr><td>c</td><td>d</td></tr>',
+          '</tbody>',
+          '</table>',
+        ),
         '</blockquote>',
       ].join('\n'),
     )
@@ -299,7 +302,7 @@ describe('renderMarkdown tables', () => {
     const source = ['| a | b |', '| --- | --- |', '| - item | x |'].join('\n')
     assert.equal(
       renderMarkdown(source),
-      [
+      tableHtml(
         '<table>',
         '<thead>',
         '<tr><th>a</th><th>b</th></tr>',
@@ -308,14 +311,14 @@ describe('renderMarkdown tables', () => {
         '<tr><td>- item</td><td>x</td></tr>',
         '</tbody>',
         '</table>',
-      ].join('\n'),
+      ),
     )
   })
 
   it('escapes HTML in cells', () => {
     assert.equal(
       renderMarkdown('| <script> |\n| --- |\n| & |'),
-      [
+      tableHtml(
         '<table>',
         '<thead>',
         '<tr><th>&lt;script&gt;</th></tr>',
@@ -324,7 +327,7 @@ describe('renderMarkdown tables', () => {
         '<tr><td>&amp;</td></tr>',
         '</tbody>',
         '</table>',
-      ].join('\n'),
+      ),
     )
   })
 })

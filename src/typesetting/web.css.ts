@@ -229,9 +229,14 @@ body.web {
 .article table {
   width: 100%;
   border-collapse: collapse;
-  margin: 0 0 1.4em;
+  margin: 0;
   font-size: 0.95em;
-  overflow-wrap: anywhere;
+}
+
+.article .table-wrap {
+  width: 100%;
+  margin: 0 0 1.4em;
+  overflow-x: auto;
 }
 
 .article th,
@@ -239,6 +244,7 @@ body.web {
   border: 1px solid #e0e0e0;
   padding: 0.55em 0.75em;
   vertical-align: top;
+  overflow-wrap: anywhere;
 }
 
 .article th {
