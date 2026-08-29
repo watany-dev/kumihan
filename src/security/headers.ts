@@ -1,6 +1,6 @@
 import { secureHeaders } from 'hono/secure-headers'
 
-export const CONTENT_SECURITY_POLICY = [
+const CONTENT_SECURITY_POLICY = [
   "default-src 'none'",
   "base-uri 'none'",
   "form-action 'none'",
@@ -22,7 +22,7 @@ export const DOCUMENT_CONTENT_SECURITY_POLICY = CONTENT_SECURITY_POLICY.split(';
   .filter((directive) => !directive.startsWith('frame-ancestors'))
   .join('; ')
 
-export const REFERRER_POLICY = 'no-referrer'
+const REFERRER_POLICY = 'no-referrer'
 
 // 内容は定数なので、リクエストごとに組み立て直さない。
 const DOCUMENT_SECURITY_META = `  <meta http-equiv="Content-Security-Policy" content="${DOCUMENT_CONTENT_SECURITY_POLICY}">

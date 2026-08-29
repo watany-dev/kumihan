@@ -19,6 +19,7 @@ GitHub Codespaces と Dev Container は Bun と Vite+ を入れ、`vp install --
 | `bun run compile`          | 今の OS 向けスタンドアロン実行ファイルを `dist-bin/` に出す |
 | `bun run compile -- --all` | Linux / macOS / Windows 向けバイナリを出す                  |
 | `vp check`                 | フォーマット・lint（警告もエラー）・型チェック              |
+| `bun run knip`             | 未使用のファイル・export・依存関係を検出する                |
 | `vp test`                  | parser / renderer / HTTP のテストとファジング               |
 | `vp test --coverage`       | 同上。`src/**` のカバレッジ 95% を要求する                  |
 | `bun run bench`            | 組版パイプラインの処理時間を測る                            |
@@ -80,6 +81,6 @@ bun run bench:memory -- --scale 2000
 
 ## CI とリリース
 
-`main` への push と PR で `vp check`、カバレッジ付きテスト、export、バイナリの smoke test、`actionlint`、`zizmor` が走ります。セキュリティ用ワークフローは Semgrep、Gitleaks、`bun audit` を weekly でも回します。
+`main` への push と PR で `vp check`、knip、カバレッジ付きテスト、export、バイナリの smoke test、`actionlint`、`zizmor` が走ります。セキュリティ用ワークフローは Semgrep、Gitleaks、`bun audit` を weekly でも回します。
 
 バージョンタグ（`v0.1.0` など）では、同じ検査のあとスタンドアロン実行ファイルを GitHub Release に載せます。脆弱性の報告手順は [SECURITY.md](SECURITY.md) です。
