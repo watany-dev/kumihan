@@ -1,6 +1,7 @@
 import { escapeHtml } from './escape.js'
 import { HARD_BREAK, stripHardBreakSentinel } from './hard-break.js'
 import { renderInline } from './inline.js'
+import { isTableStart, parseTable } from './table.js'
 
 function lineAt(lines: readonly string[], index: number): string {
   const line = lines[index]
@@ -123,6 +124,15 @@ function renderLines(lines: readonly string[], depth: number): string {
       const parsed = parseList(lines, i, 'ol', orderedOffset)
       blocks = append(blocks, parsed.html)
       i = parsed.next
+      continue
+    }
+
+    // 表は先頭文字では決まりません（`Name | Value` のように `|` が途中でも
+    // 始まる）。区切り行まで見てから、段落へ落とします。
+    const table = parseTable(lines, i, (row) => isBlank(row) || isNonTableBlockStart(row, depth))
+    if (table) {
+      blocks = append(blocks, table.html)
+      i = table.next
       continue
     }
 
@@ -261,7 +271,7 @@ function parseParagraph(
 
   while (i < lines.length) {
     const line = lineAt(lines, i)
-    if (isBlank(line) || isBlockStart(line, depth)) {
+    if (isBlank(line) || isBlockStart(line, depth, lineAt(lines, i + 1))) {
       break
     }
     collected.push(line)
@@ -291,7 +301,7 @@ function parseParagraph(
 // 段落の大半はこの 1 回の判定だけで抜けられます。
 const BLOCK_START_HEAD = /^[`#\->\d\s]/
 
-function isBlockStart(line: string, depth: number): boolean {
+function isNonTableBlockStart(line: string, depth: number): boolean {
   if (!BLOCK_START_HEAD.test(line)) return false
   if (line.startsWith('```')) return true
   if (isHeadingLine(line)) return true
@@ -300,6 +310,13 @@ function isBlockStart(line: string, depth: number): boolean {
   if (unorderedOffset(line) > 0) return true
   if (orderedOffset(line) > 0) return true
   return false
+}
+
+function isBlockStart(line: string, depth: number, nextLine: string): boolean {
+  // 表以外のブロックは先頭 1 文字でほぼ分かります。`|` は BLOCK_START_HEAD
+  // に入れず、区切り行とセットのときだけ段落を止めます。
+  if (isNonTableBlockStart(line, depth)) return true
+  return isTableStart(line, nextLine)
 }
 
 // 行の境目に空白を入れるかどうかは、直前の文字だけで決まります。
