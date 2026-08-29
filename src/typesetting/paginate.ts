@@ -7,25 +7,11 @@ export const MAGAZINE_LINES_PER_PAGE = 40
 export const PRINT_LINES_PER_PAGE = 24
 
 /**
- * 2段組をおよそ 40 行の頁に分割する。ブロックの途中では切らない。
- */
-export function paginateMagazine(html: string): string[] {
-  return paginateByLines(html, MAGAZINE_LINES_PER_PAGE)
-}
-
-/**
- * 1段組をおよそ 24 行の頁に分割する。ブロックの途中では切らない。
- */
-export function paginatePrint(html: string): string[] {
-  return paginateByLines(html, PRINT_LINES_PER_PAGE)
-}
-
-/**
  * HTML 断片の改行数で頁に詰める。ブロックの途中では切らない。
  *
  * ponytail: 折り返しや段の高さは見ない。視覚行がずれたら estimate を足す。
  */
-function paginateByLines(html: string, linesPerPage: number): string[] {
+export function paginate(html: string, linesPerPage: number): string[] {
   const blocks = splitBlocks(html)
   if (blocks.length === 0) {
     return ['']
