@@ -208,6 +208,16 @@ function measureUnclosedBrackets(size: number): number {
   return performance.now() - started
 }
 
+// `](` はすぐ見つかるのに `)` だけが末尾まで空振りする形。`](` の有無だけを
+// 見ていると、この原稿でリンクごとに全体を走査して二乗時間になる。
+function measureUnclosedParens(size: number): number {
+  const input = '[a]('.repeat(size)
+  renderMarkdown(input)
+  const started = performance.now()
+  renderMarkdown(input)
+  return performance.now() - started
+}
+
 describe('markdown fuzzing', () => {
   it('keeps the generated HTML well formed and escaped', () => {
     for (let seed = 1; seed <= 2000; seed += 1) {
@@ -238,6 +248,13 @@ describe('markdown fuzzing', () => {
     const small = Math.max(measureUnclosedBrackets(20_000), 0.5)
     const large = measureUnclosedBrackets(160_000)
     assert.ok(large < small * 40, `20000 文字 ${small}ms に対して 160000 文字 ${large}ms`)
+  })
+
+  it('does not rescan the whole line for every link left unclosed', () => {
+    // `[a](` を並べた原稿で二乗時間にならないこと。
+    const small = Math.max(measureUnclosedParens(20_000), 0.5)
+    const large = measureUnclosedParens(160_000)
+    assert.ok(large < small * 40, `20000 個 ${small}ms に対して 160000 個 ${large}ms`)
   })
 
   it('keeps a URL that spans a hard break', () => {

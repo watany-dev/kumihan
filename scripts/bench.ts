@@ -86,7 +86,10 @@ console.log('case                        median(ms)     min(ms)     MB/s')
 console.log('-'.repeat(62))
 
 for (const testCase of cases) {
-  measure(testCase.run, Math.max(3, Math.ceil(iterations / 5))) // warmup
+  // JIT が温まりきる前の計測は桁で外れます（`escapeHtml (markup)` は暖機が
+  // 足りないと実測の 1/30 のスループットに見えました）。反復数が少なくても
+  // 一定回数は空回ししてから測ります。
+  measure(testCase.run, Math.max(200, Math.ceil(iterations / 5))) // warmup
   const samples = measure(testCase.run, iterations)
   const med = median(samples)
   const min = Math.min(...samples)
