@@ -149,6 +149,48 @@ body {
   font-size: inherit;
 }
 
+.typeset table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 1.1em;
+  font-size: 0.95em;
+  break-inside: avoid;
+}
+
+.typeset th,
+.typeset td {
+  border: 0.4pt solid #d0cdc6;
+  padding: 0.35em 0.65em;
+  vertical-align: top;
+}
+
+.typeset th {
+  font-family:
+    "Hiragino Kaku Gothic ProN",
+    "Yu Gothic",
+    "YuGothic",
+    sans-serif;
+  font-weight: 600;
+  background: #f4f1ea;
+  text-align: left;
+}
+
+.typeset td {
+  text-align: left;
+}
+
+.typeset .align-left {
+  text-align: left;
+}
+
+.typeset .align-center {
+  text-align: center;
+}
+
+.typeset .align-right {
+  text-align: right;
+}
+
 .typeset.cols-2 {
   column-count: 2;
   column-gap: 8mm;
@@ -160,6 +202,7 @@ body {
 .typeset.cols-2 h1,
 .typeset.cols-2 h1 + p,
 .typeset.cols-2 pre,
+.typeset.cols-2 table,
 .typeset.cols-2 hr {
   column-span: all;
 }

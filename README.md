@@ -171,8 +171,9 @@ chmod +x kumihan
 - `-` 箇条書き / `1.` 番号付きリスト
 - `---` 水平線
 - フェンス付きコードブロック
+- パイプ区切りの表（揃えの `:` とセル内の `\|` を含む）
 
-非対応: raw HTML、入れ子リスト、table、footnote、task list、image、MDX、frontmatter、syntax highlighting。
+非対応: raw HTML、入れ子リスト、footnote、task list、image、MDX、frontmatter、syntax highlighting。
 
 HTML は必ず escape します。リンクは `https:` / `http:` / `mailto:` / 相対 URL / `#fragment` のみ許可し、`javascript:` などは安全な値へ置き換えます。
 

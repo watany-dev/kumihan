@@ -226,6 +226,44 @@ body.web {
   font-size: inherit;
 }
 
+.article table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 1.4em;
+  font-size: 0.95em;
+  overflow-wrap: anywhere;
+}
+
+.article th,
+.article td {
+  border: 1px solid #e0e0e0;
+  padding: 0.55em 0.75em;
+  vertical-align: top;
+}
+
+.article th {
+  background: #f7f7f7;
+  font-weight: 700;
+  text-align: left;
+  color: #222222;
+}
+
+.article td {
+  text-align: left;
+}
+
+.article .align-left {
+  text-align: left;
+}
+
+.article .align-center {
+  text-align: center;
+}
+
+.article .align-right {
+  text-align: right;
+}
+
 @media (max-width: 640px) {
   .site-header-inner {
     height: 52px;
