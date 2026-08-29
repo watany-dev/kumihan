@@ -49,7 +49,7 @@ macOS で隔離されるときは `xattr -d com.apple.quarantine kumihan-darwin-
 1. このリポジトリを Codespaces で開く
 2. ターミナルで `bun run dev` を実行する
 3. Forwarded Port `3000`（Typeset Preview）をブラウザで開く
-4. `content/index.md` を編集して保存する（プレビューは数秒以内に追従します）
+4. `content/index.md` を編集して保存する
 
 ### ローカル
 
@@ -92,7 +92,7 @@ HTML は escape します。リンクは `https:` / `http:` / `mailto:` / 相対
 | 2段    | `/magazine.html` | 同じ原稿を A4 縦2列にする。見出し・リード・コードは全幅。長いときはおよそ 40 行ごとに頁分け        |
 | Web    | `/web.html`      | 画面幅に合わせた記事。本文はゴシック                                                               |
 
-切り替えは右上（Web ではヘッダー）から行います。JavaScript は使いません。組版と 2段は画面上でも印刷時でも A4 が積み重なります。プレビューは約 2 秒ごとに原稿を読み直します。
+切り替えは右上（Web ではヘッダー）から行います。JavaScript は使いません。組版と 2段は画面上でも印刷時でも A4 が積み重なります。保存するとプレビューが追従します。
 
 ## 書き出しと GitHub Pages
 
