@@ -16,6 +16,41 @@ function lineAt(lines: readonly string[], index: number): string {
 // これを超えた引用の中身は、記法を解釈せず段落として出します。
 const MAX_BLOCKQUOTE_DEPTH = 32
 
+const BACKTICK = 0x60
+const HASH = 0x23
+const GREATER_THAN = 0x3e
+const HYPHEN = 0x2d
+const SPACE = 0x20
+const DOT = 0x2e
+const ZERO = 0x30
+const NINE = 0x39
+
+/**
+ * 箇条書きの行なら中身が始まる位置、そうでなければ -1 を返します。
+ *
+ * もとは `/^- /` と `/^\d+\. /` を test と replace で 2 回ずつ当てていました。
+ * 記法がごく単純なので、文字コードを直接読んだほうが速く、正規表現の
+ * マッチ結果を確保せずに済みます。
+ */
+function unorderedOffset(line: string): number {
+  return line.charCodeAt(0) === HYPHEN && line.charCodeAt(1) === SPACE ? 2 : -1
+}
+
+// `/^\d+\. /` と同じ判定です。数字が 1 文字以上続き、`.` と空白が続くこと。
+function orderedOffset(line: string): number {
+  let i = 0
+  while (i < line.length) {
+    const code = line.charCodeAt(i)
+    if (code < ZERO || code > NINE) break
+    i += 1
+  }
+
+  if (i === 0 || line.charCodeAt(i) !== DOT || line.charCodeAt(i + 1) !== SPACE) {
+    return -1
+  }
+  return i + 2
+}
+
 // 改行コードの正規化は原稿全体を作り直します。`\r` を含まない原稿（ほとんどが
 // そうです）では indexOf 一回で済ませ、正規表現と再確保をまるごと省きます。
 function normalizeNewlines(source: string): string {
@@ -42,18 +77,26 @@ function renderLines(lines: readonly string[], depth: number): string {
       continue
     }
 
-    if (line.startsWith('```')) {
+    // ブロックの種類は先頭 1 文字でほぼ絞れます。先に読んでおくと、当てはまら
+    // ない行に対して startsWith や正規表現をいくつも試さずに済みます。
+    // 判定の順番は以前のままです（先頭文字が一致しても記法として成立しない
+    // 行、たとえば `####x` は、そのまま次の判定へ進みます）。
+    const first = line.charCodeAt(0)
+
+    if (first === BACKTICK && line.startsWith('```')) {
       const parsed = parseFencedCode(lines, i)
       blocks = append(blocks, parsed.html)
       i = parsed.next
       continue
     }
 
-    const heading = parseHeading(line)
-    if (heading) {
-      blocks = append(blocks, heading)
-      i += 1
-      continue
+    if (first === HASH) {
+      const heading = parseHeading(line)
+      if (heading) {
+        blocks = append(blocks, heading)
+        i += 1
+        continue
+      }
     }
 
     if (isHorizontalRule(line)) {
@@ -62,22 +105,22 @@ function renderLines(lines: readonly string[], depth: number): string {
       continue
     }
 
-    if (line.startsWith('>') && depth < MAX_BLOCKQUOTE_DEPTH) {
+    if (first === GREATER_THAN && depth < MAX_BLOCKQUOTE_DEPTH) {
       const parsed = parseBlockquote(lines, i, depth)
       blocks = append(blocks, parsed.html)
       i = parsed.next
       continue
     }
 
-    if (line.startsWith('- ')) {
-      const parsed = parseList(lines, i, 'ul', /^- /)
+    if (unorderedOffset(line) > 0) {
+      const parsed = parseList(lines, i, 'ul', unorderedOffset)
       blocks = append(blocks, parsed.html)
       i = parsed.next
       continue
     }
 
-    if (/^\d+\. /.test(line)) {
-      const parsed = parseList(lines, i, 'ol', /^\d+\. /)
+    if (orderedOffset(line) > 0) {
+      const parsed = parseList(lines, i, 'ol', orderedOffset)
       blocks = append(blocks, parsed.html)
       i = parsed.next
       continue
@@ -98,7 +141,6 @@ function append(blocks: string, html: string): string {
 }
 
 const HEADING = /^(#{1,3}) (.+)$/
-const HASH = 0x23
 
 // 見出しになりうるのは `#` で始まる行だけです。この 1 文字を先に見ておくと、
 // 段落の各行に見出しの正規表現を当てずに済みます。
@@ -106,11 +148,8 @@ function isHeadingLine(line: string): boolean {
   return line.charCodeAt(0) === HASH && HEADING.test(line)
 }
 
+// 呼び出し元は行が `#` で始まることを確かめています。
 function parseHeading(line: string): string | null {
-  if (line.charCodeAt(0) !== HASH) {
-    return null
-  }
-
   const match = HEADING.exec(line)
   if (!match) {
     return null
@@ -190,25 +229,24 @@ function parseList(
   lines: readonly string[],
   start: number,
   tag: 'ul' | 'ol',
-  marker: RegExp,
+  offsetOf: (line: string) => number,
 ): { html: string; next: number } {
-  const items: string[] = []
+  let items = ''
   let i = start
 
   while (i < lines.length) {
     const line = lineAt(lines, i)
-    // test と replace で 2 回当てていた正規表現を 1 回にします。marker は
-    // 行頭に錨を張っているので、replace が消すのは match[0] そのものです。
-    const match = marker.exec(line)
-    if (!match) {
+    const offset = offsetOf(line)
+    if (offset < 0) {
       break
     }
-    items.push(`<li>${renderInline(line.slice(match[0].length))}</li>`)
+    const item = `<li>${renderInline(line.slice(offset))}</li>`
+    items = i === start ? item : `${items}\n${item}`
     i += 1
   }
 
   return {
-    html: `<${tag}>\n${items.join('\n')}\n</${tag}>`,
+    html: `<${tag}>\n${items}\n</${tag}>`,
     next: i,
   }
 }
@@ -259,8 +297,8 @@ function isBlockStart(line: string, depth: number): boolean {
   if (isHeadingLine(line)) return true
   if (isHorizontalRule(line)) return true
   if (line.startsWith('>')) return depth < MAX_BLOCKQUOTE_DEPTH
-  if (line.startsWith('- ')) return true
-  if (/^\d+\. /.test(line)) return true
+  if (unorderedOffset(line) > 0) return true
+  if (orderedOffset(line) > 0) return true
   return false
 }
 
