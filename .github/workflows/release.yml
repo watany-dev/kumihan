@@ -65,14 +65,23 @@ jobs:
           set -euo pipefail
           test -f dist-bin/SHA256SUMS.txt
           test -f dist-bin/kumihan-linux-x64
-          notes="$(mktemp)"
-          printf 'kumihan %s のスタンドアロン実行ファイルです。serve / export。macOS では xattr -d com.apple.quarantine が必要なことがあります。\n' "${TAG}" > "${notes}"
-          gh release create "${TAG}" \
-            --title "${TAG}" \
-            --notes-file "${notes}" \
-            dist-bin/kumihan-linux-x64 \
-            dist-bin/kumihan-linux-arm64 \
-            dist-bin/kumihan-darwin-x64 \
-            dist-bin/kumihan-darwin-arm64 \
-            dist-bin/kumihan-windows-x64.exe \
+          assets=(
+            dist-bin/kumihan-linux-x64
+            dist-bin/kumihan-linux-arm64
+            dist-bin/kumihan-darwin-x64
+            dist-bin/kumihan-darwin-arm64
+            dist-bin/kumihan-windows-x64.exe
             dist-bin/SHA256SUMS.txt
+          )
+          # Release を先に UI で作ってあることがある。その場合は本文を残して
+          # バイナリだけ足す。無ければ新規に作る。
+          if gh release view "${TAG}" > /dev/null 2>&1; then
+            gh release upload "${TAG}" "${assets[@]}" --clobber
+          else
+            notes="$(mktemp)"
+            printf 'kumihan %s のスタンドアロン実行ファイルです。serve / export。macOS では xattr -d com.apple.quarantine が必要なことがあります。\n' "${TAG}" > "${notes}"
+            gh release create "${TAG}" \
+              --title "${TAG}" \
+              --notes-file "${notes}" \
+              "${assets[@]}"
+          fi
