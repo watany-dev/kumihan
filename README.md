@@ -32,11 +32,11 @@ chmod +x kumihan
 ./kumihan export manuscript.md --out dist
 ```
 
-| ファイル | 対象 |
-| -------- | ---- |
-| `kumihan-linux-x64` / `kumihan-linux-arm64` | Linux |
-| `kumihan-darwin-x64` / `kumihan-darwin-arm64` | macOS |
-| `kumihan-windows-x64.exe` | Windows |
+| ファイル                                      | 対象    |
+| --------------------------------------------- | ------- |
+| `kumihan-linux-x64` / `kumihan-linux-arm64`   | Linux   |
+| `kumihan-darwin-x64` / `kumihan-darwin-arm64` | macOS   |
+| `kumihan-windows-x64.exe`                     | Windows |
 
 macOS で隔離されるときは `xattr -d com.apple.quarantine kumihan-darwin-arm64` を実行してください。既定の待ち受けは `127.0.0.1:3000` です。ポートやホストを変えるときは `--port` / `--host` を付けます。
 
@@ -86,11 +86,11 @@ HTML は escape します。リンクは `https:` / `http:` / `mailto:` / 相対
 
 ## 表示モード
 
-| モード | アドレス | 見た目 |
-| ------ | -------- | ------ |
-| 組版   | `/` | A4 1段組。本文は明朝、見出しはゴシック、code は等幅。印刷は A4 |
+| モード | アドレス         | 見た目                                                                                      |
+| ------ | ---------------- | ------------------------------------------------------------------------------------------- |
+| 組版   | `/`              | A4 1段組。本文は明朝、見出しはゴシック、code は等幅。印刷は A4                              |
 | 2段    | `/magazine.html` | 同じ原稿を A4 縦2列にする。見出し・リード・コードは全幅。長いときはおよそ 40 行ごとに頁分け |
-| Web    | `/web.html` | 画面幅に合わせた記事。本文はゴシック |
+| Web    | `/web.html`      | 画面幅に合わせた記事。本文はゴシック                                                        |
 
 切り替えは右上（Web ではヘッダー）から行います。JavaScript は使いません。2段組は画面上でも印刷時でも A4 が積み重なります。v0.1 の live reload はブラウザの手動更新です。
 
@@ -116,11 +116,11 @@ dist/
 
 ## コマンド
 
-| コマンド | 内容 |
-| -------- | ---- |
-| `kumihan serve [file]` | プレビューを起動する。既定の原稿は `content/index.md` |
+| コマンド                | 内容                                                      |
+| ----------------------- | --------------------------------------------------------- |
+| `kumihan serve [file]`  | プレビューを起動する。既定の原稿は `content/index.md`     |
 | `kumihan export [file]` | `dist/*.html` と CSS を生成する。`--out` で出力先を変える |
-| `bun run dev` | リポジトリの `content/index.md` をプレビューする |
-| `bun run export` | リポジトリの原稿を `dist/` へ書き出す |
+| `bun run dev`           | リポジトリの `content/index.md` をプレビューする          |
+| `bun run export`        | リポジトリの原稿を `dist/` へ書き出す                     |
 
 開発（テスト、lint、ベンチ、内部 API）は [CONTRIBUTING.md](CONTRIBUTING.md) を見てください。脆弱性の報告は [SECURITY.md](SECURITY.md) です。

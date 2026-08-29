@@ -12,34 +12,34 @@ GitHub Codespaces と Dev Container は Bun と Vite+ を入れ、`vp install --
 
 ## コマンド
 
-| コマンド | 内容 |
-| -------- | ---- |
-| `bun run dev` | Preview server を起動する |
-| `bun run export` | `dist/*.html` と CSS を生成する |
-| `bun run compile` | 今の OS 向けスタンドアロン実行ファイルを `dist-bin/` に出す |
-| `bun run compile -- --all` | Linux / macOS / Windows 向けバイナリを出す |
-| `vp check` | フォーマット・lint（警告もエラー）・型チェック |
-| `vp test` | parser / renderer / HTTP のテストとファジング |
-| `vp test --coverage` | 同上。`src/**` のカバレッジ 95% を要求する |
-| `bun run bench` | 組版パイプラインの処理時間を測る |
-| `bun run bench:size` | バンドルサイズとモジュール内訳を測る |
-| `bun run bench:memory` | 変換段階ごとの RSS ピークを測る |
-| `bun audit` | 依存関係の脆弱性を検査する |
+| コマンド                   | 内容                                                        |
+| -------------------------- | ----------------------------------------------------------- |
+| `bun run dev`              | Preview server を起動する                                   |
+| `bun run export`           | `dist/*.html` と CSS を生成する                             |
+| `bun run compile`          | 今の OS 向けスタンドアロン実行ファイルを `dist-bin/` に出す |
+| `bun run compile -- --all` | Linux / macOS / Windows 向けバイナリを出す                  |
+| `vp check`                 | フォーマット・lint（警告もエラー）・型チェック              |
+| `vp test`                  | parser / renderer / HTTP のテストとファジング               |
+| `vp test --coverage`       | 同上。`src/**` のカバレッジ 95% を要求する                  |
+| `bun run bench`            | 組版パイプラインの処理時間を測る                            |
+| `bun run bench:size`       | バンドルサイズとモジュール内訳を測る                        |
+| `bun run bench:memory`     | 変換段階ごとの RSS ピークを測る                             |
+| `bun audit`                | 依存関係の脆弱性を検査する                                  |
 
 `vp fmt` / `vp lint` でも個別に実行できます。テストのファジングは種を固定しているので再現します。
 
 ## HTTP
 
-| 経路 | 内容 |
-| ---- | ---- |
-| `GET /` | 原稿を読み、A4 1段組 HTML を返す |
-| `GET /magazine.html` | 同じ原稿を A4 2段組（約 40 行で頁分け）で返す |
-| `GET /magazine` | `/magazine.html` と同じ |
-| `GET /web.html` | 同じ原稿を Web 記事スタイルで返す |
-| `GET /web` | `/web.html` と同じ |
-| `GET /health` | `{ "ok": true }` |
-| `GET /assets/typeset.css` | 組版 CSS（1段 / 2段） |
-| `GET /assets/web.css` | Web 記事 CSS |
+| 経路                      | 内容                                          |
+| ------------------------- | --------------------------------------------- |
+| `GET /`                   | 原稿を読み、A4 1段組 HTML を返す              |
+| `GET /magazine.html`      | 同じ原稿を A4 2段組（約 40 行で頁分け）で返す |
+| `GET /magazine`           | `/magazine.html` と同じ                       |
+| `GET /web.html`           | 同じ原稿を Web 記事スタイルで返す             |
+| `GET /web`                | `/web.html` と同じ                            |
+| `GET /health`             | `{ "ok": true }`                              |
+| `GET /assets/typeset.css` | 組版 CSS（1段 / 2段）                         |
+| `GET /assets/web.css`     | Web 記事 CSS                                  |
 
 `GET /` は毎回ファイルを読み直し、`Cache-Control: no-store` で返します。応答には CSP（`script-src 'none'`）ほかセキュリティヘッダを付け、静的 HTML にも同じ CSP を `<meta>` で埋めます。原稿が無いときは 404、読み込み失敗時は 500 で、stack trace はブラウザへ出しません。`CONNECT` / `TRACE` / `TRACK` は 405 です。
 
