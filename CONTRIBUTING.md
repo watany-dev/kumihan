@@ -20,8 +20,7 @@ GitHub Codespaces と Dev Container は Bun と Vite+ を入れ、`vp install --
 | `bun run compile -- --all` | Linux / macOS / Windows 向けバイナリを出す                  |
 | `vp check`                 | フォーマット・lint（警告もエラー）・型チェック              |
 | `bun run knip`             | 未使用のファイル・export・依存関係を検出する                |
-| `bun run test`             | ローカル向け。agent レポーターで成功時のログを抑える        |
-| `vp test`                  | parser / renderer / HTTP のテストとファジング（CI と同じ）  |
+| `vp test`                  | parser / renderer / HTTP のテストとファジング               |
 | `vp test --coverage`       | 同上。`src/**` のカバレッジ 95% を要求する                  |
 | `bun run bench`            | 組版パイプラインの処理時間を測る                            |
 | `bun run bench:size`       | バンドルサイズとモジュール内訳を測る                        |

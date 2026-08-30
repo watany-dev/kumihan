@@ -1,5 +1,7 @@
 import { defineConfig } from 'vite-plus'
 
+const isCI = Boolean(process.env['CI'])
+
 export default defineConfig({
   lint: {
     ignorePatterns: ['dist/**', 'dist-bin/**', 'build/**', 'coverage/**'],
@@ -103,6 +105,9 @@ export default defineConfig({
   test: {
     include: ['test/**/*.test.ts'],
     environment: 'node',
+    // ローカルは agent レポーターで成功したテストのログを抑える。CI は既定の出力のまま。
+    reporters: isCI ? ['default'] : ['agent'],
+    silent: isCI ? false : 'passed-only',
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
