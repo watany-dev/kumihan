@@ -2,18 +2,16 @@ import { createServer, type OutgoingHttpHeaders } from 'node:http'
 
 import type { Hono } from 'hono'
 
-export function createNodeServer(app: Hono): ReturnType<typeof createServer> {
+import { AUTHORITY, isAllowedHost, LOOPBACK_HOST_POLICY, type HostPolicy } from './security/host.js'
+
+export function createNodeServer(
+  app: Hono,
+  hostPolicy: HostPolicy = LOOPBACK_HOST_POLICY,
+): ReturnType<typeof createServer> {
   return createServer((req, res) => {
-    void dispatchNodeRequest(req, res, async (request) => app.fetch(request))
+    void dispatchNodeRequest(req, res, async (request) => app.fetch(request), hostPolicy)
   })
 }
-
-// Host ヘッダはクライアントが自由に決められるので、そのまま URL に
-// 埋め込むと `evil.com/x?` のような値でリクエスト URL のパスや
-// クエリを差し替えられます。素の authority（ホストと任意のポート）
-// でなければ採用しません。
-const AUTHORITY =
-  /^(?:\[[0-9a-fA-F:.]+\]|[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?)*)(?::\d{1,5})?$/
 
 export function safeHost(host: string | undefined): string {
   if (host === undefined || host.length > 255) {
@@ -83,6 +81,16 @@ export function describeListenError(error: unknown, host: string, port: number):
 // Request を作る前に 405 で断ります。
 const FORBIDDEN_METHODS = new Set(['CONNECT', 'TRACE', 'TRACK'])
 
+// 断る理由を書いておかないと、Codespaces や LAN から開いた人には
+// 「なぜか 403 が返る」だけになります。逃げ道の名前をそのまま出します。
+const FORBIDDEN_HOST = [
+  'Forbidden host.',
+  '',
+  'kumihan は Host ヘッダが自分の名前のときだけ原稿を返します',
+  '（DNS リバインディング対策）。この名前で開きたいときは',
+  'KUMIHAN_ALLOWED_HOSTS=example.com のように許可してください。',
+].join('\n')
+
 function isForbiddenMethod(method: string): boolean {
   return FORBIDDEN_METHODS.has(method.toUpperCase())
 }
@@ -107,8 +115,19 @@ export async function dispatchNodeRequest(
   req: NodeRequestLike,
   res: NodeResponseLike,
   fetchImpl: (request: Request) => Promise<Response>,
+  hostPolicy: HostPolicy = LOOPBACK_HOST_POLICY,
 ): Promise<void> {
   try {
+    // 原稿を返す前に、名乗られたホストが自分の名前かどうかを見ます。
+    // 詳しくは src/security/host.ts を参照。
+    if (!isAllowedHost(req.headers.host, hostPolicy)) {
+      res.writeHead(403, {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'X-Content-Type-Options': 'nosniff',
+      })
+      res.end(FORBIDDEN_HOST)
+      return
+    }
     const host = safeHost(req.headers.host)
     const method = req.method ?? 'GET'
     if (isForbiddenMethod(method)) {

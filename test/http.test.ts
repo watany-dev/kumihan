@@ -271,23 +271,23 @@ describe('Host header validation', () => {
     assert.equal(safeHost('example1.com:3000'), 'example1.com:3000')
   })
 
-  it('answers normally for a Host header the URL parser rejects', async () => {
-    let seen = ''
+  it('refuses a Host header the URL parser rejects, without reading the manuscript', async () => {
+    let reached = false
     await withServer(
       (req, res) => {
         req.headers.host = '999.999.999.999'
-        void dispatchNodeRequest(req, res, async (request) => {
-          seen = new URL(request.url).host
+        void dispatchNodeRequest(req, res, async () => {
+          reached = true
           return new Response('ok')
         })
       },
       async (port) => {
         const res = await fetch(`http://127.0.0.1:${port}/health`)
-        assert.equal(res.status, 200)
-        assert.equal(await res.text(), 'ok')
-        assert.equal(seen, '127.0.0.1')
+        assert.equal(res.status, 403)
+        await res.text()
       },
     )
+    assert.equal(reached, false)
   })
 
   it('answers normally for a Host header with an out-of-range port', async () => {
@@ -406,21 +406,24 @@ describe('Host header validation', () => {
   })
 
   it('does not let the Host header change the routed path', async () => {
-    let seen = ''
+    // 経路の差し替え以前に、他人のドメインを名乗るリクエストは 403 で
+    // 断ります（DNS リバインディング対策。test/host-policy.test.ts を参照）。
+    let reached = false
     await withServer(
       (req, res) => {
         req.headers.host = 'evil.example.com/magazine.html?'
-        void dispatchNodeRequest(req, res, async (request) => {
-          seen = new URL(request.url).pathname
+        void dispatchNodeRequest(req, res, async () => {
+          reached = true
           return new Response('ok')
         })
       },
       async (port) => {
         const res = await fetch(`http://127.0.0.1:${port}/health`)
+        assert.equal(res.status, 403)
         await res.text()
       },
     )
-    assert.equal(seen, '/health')
+    assert.equal(reached, false)
   })
 })
 
