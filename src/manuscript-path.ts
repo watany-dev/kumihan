@@ -51,7 +51,7 @@ export async function resolveManuscriptFile(root: string, rel: string): Promise<
   }
 }
 
-function contained(root: string, candidate: string): boolean {
+export function contained(root: string, candidate: string): boolean {
   const rel = relative(root, candidate)
   return rel !== '' && rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel)
 }

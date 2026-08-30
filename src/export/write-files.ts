@@ -1,7 +1,7 @@
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 
-import { resolveManuscriptFile } from '../manuscript-path.js'
+import { contained, resolveManuscriptFile } from '../manuscript-path.js'
 import { renderMarkdown } from '../markdown/render.js'
 import { exportSite } from './export-site.js'
 
@@ -20,6 +20,7 @@ export async function writeExport(source: string, outDir: string): Promise<strin
     }),
   )
   const root = dirname(resolve(source))
+  const destRoot = resolve(outDir)
   const copied: string[] = []
   for (const match of renderMarkdown(markdown).matchAll(/<img src="([^"]*)"/g)) {
     const src = match[1] ?? ''
@@ -29,7 +30,18 @@ export async function writeExport(source: string, outDir: string): Promise<strin
       console.error(`[kumihan] 画像が見つかりません: ${src}`)
       continue
     }
-    const dest = join(outDir, src)
+    let destRel = src
+    try {
+      destRel = decodeURIComponent(src)
+    } catch {
+      console.error(`[kumihan] 画像の出力先が不正です: ${src}`)
+      continue
+    }
+    const dest = resolve(destRoot, destRel)
+    if (!contained(destRoot, dest)) {
+      console.error(`[kumihan] 画像の出力先が不正です: ${src}`)
+      continue
+    }
     await mkdir(dirname(dest), { recursive: true })
     await copyFile(from, dest)
     copied.push(dest)
