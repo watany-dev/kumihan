@@ -2,13 +2,21 @@ import { parseArgs } from 'node:util'
 
 import { createPreviewApp } from './app.js'
 import { writeExport } from './export/write-files.js'
+import { fileManuscript, memoryManuscript, type Manuscript } from './manuscript.js'
 import { createNodeServer, describeListenError } from './node-server.js'
 import { createHostPolicy } from './security/host.js'
+import { readStdin } from './stdin.js'
 
 const VERSION = '0.1.0'
 const USAGE = `kumihan ${VERSION}
-  kumihan serve [file]    # content/index.md, 127.0.0.1:3000
-  kumihan export [file]   # --out dist`
+  kumihan serve [file|-]    # content/index.md, 127.0.0.1:3000
+  kumihan export [file|-]   # --out dist
+
+\`-\` は標準入力から原稿を読みます。ファイルを省略したときも、標準入力が
+端末でなければ（パイプやリダイレクト）そちらを読みます。画像の相対パスは
+カレントディレクトリから探します。`
+
+const DEFAULT_SOURCE = 'content/index.md'
 
 let values: {
   help: boolean
@@ -47,13 +55,38 @@ if (values.version) {
 }
 
 const command = positionals[0]
-const source = positionals[1] ?? 'content/index.md'
+const arg = positionals[1]
+const source = arg ?? DEFAULT_SOURCE
+
+// `-` なら必ず標準入力。省略時も、端末以外（パイプやリダイレクト）が
+// つながっていれば読みます。
+const explicitStdin = arg === '-'
+let manuscript: Manuscript = fileManuscript(source)
+const readsManuscript = command === 'export' || command === 'serve'
+if (readsManuscript && (explicitStdin || (arg === undefined && !process.stdin.isTTY))) {
+  let piped: string
+  try {
+    piped = await readStdin()
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.error(`標準入力を読めません: ${detail}`)
+    process.exit(1)
+  }
+  if (piped.trim().length > 0) {
+    manuscript = memoryManuscript(piped)
+  } else if (explicitStdin) {
+    console.error('標準入力が空です')
+    process.exit(1)
+  }
+  // 省略時に何も流れてこなかった場合は、端末以外につながっているだけの
+  // 起動（CI やサービス経由）とみなして既定の原稿に戻します。
+}
 
 if (command === 'export') {
   // 原稿が無いときに素の例外を出すと、内部のスタックや errno がそのまま
   // 出てしまいます。打ち間違いは普通に起きるので、短く伝えて終わります。
   try {
-    for (const dest of await writeExport(source, values.out)) {
+    for (const dest of await writeExport(manuscript, values.out)) {
       console.log(`wrote ${dest}`)
     }
   } catch (error) {
@@ -81,7 +114,7 @@ if (command === 'export') {
     allowed: process.env['KUMIHAN_ALLOWED_HOSTS'],
     portForwardingDomain: process.env['GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN'],
   })
-  const server = createNodeServer(createPreviewApp({ source }), hostPolicy)
+  const server = createNodeServer(createPreviewApp({ source: manuscript }), hostPolicy)
   // listen の失敗は例外ではなくイベントで届きます。受け取らないと、使えない
   // ホスト名や埋まっているポートを指定しただけで内部のスタックが出ます。
   server.on('error', (error) => {

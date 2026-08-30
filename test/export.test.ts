@@ -8,6 +8,7 @@ import { describe, it } from 'vite-plus/test'
 import { exportSite } from '../src/export/export-site.js'
 import { writeExport } from '../src/export/write-files.js'
 import { contained } from '../src/manuscript-path.js'
+import { memoryManuscript } from '../src/manuscript.js'
 import { renderMarkdown } from '../src/markdown/render.js'
 import { renderDocument } from '../src/typesetting/render-page.js'
 import { typesetCss } from '../src/typesetting/typeset.css.js'
@@ -192,6 +193,25 @@ describe('writeExport', () => {
       assert.ok(logged.some((line) => line.includes('%2e%2e/ms/a.png')))
     } finally {
       console.error = original
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('exports markdown handed in directly, resolving images from the given root', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'kumihan-export-stdin-'))
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64',
+    )
+    try {
+      await writeFile(join(dir, 'a.png'), png)
+      const out = join(dir, 'out')
+      // パイプで渡した本文には元ファイルが無いので、画像は root から探す。
+      const written = await writeExport(memoryManuscript('# パイプ\n\n![図](a.png)\n', dir), out)
+      assert.ok(written.some((path) => path.endsWith('index.html')))
+      assert.match(await readFile(join(out, 'index.html'), 'utf8'), /パイプ/)
+      assert.deepEqual(await readFile(join(out, 'a.png')), png)
+    } finally {
       await rm(dir, { recursive: true, force: true })
     }
   })

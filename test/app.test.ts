@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { describe, it } from 'vite-plus/test'
 
 import { createPreviewApp } from '../src/app.js'
+import { memoryManuscript } from '../src/manuscript.js'
 import { typesetCss } from '../src/typesetting/typeset.css.js'
 import { webCss } from '../src/typesetting/web.css.js'
 
@@ -146,6 +147,28 @@ describe('preview images', () => {
       await writeFile(join(dir, 'index.md'), '![x](a.png)\n')
       const app = createPreviewApp({ source: join(dir, 'index.md') })
       assert.equal((await app.request('/a.png')).status, 404)
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('serves markdown handed in directly, in every mode', async () => {
+    const app = createPreviewApp({ source: memoryManuscript('# パイプ原稿\n') })
+    for (const path of ['/', '/magazine.html', '/web.html']) {
+      const res = await app.request(path)
+      assert.equal(res.status, 200)
+      assert.match(await res.text(), /パイプ原稿/)
+    }
+  })
+
+  it('serves images next to the given root for a directly handed manuscript', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'kumihan-app-stdin-'))
+    try {
+      await writeFile(join(dir, 'a.png'), PNG)
+      const app = createPreviewApp({ source: memoryManuscript('![図](a.png)\n', dir) })
+      const res = await app.request('/a.png')
+      assert.equal(res.status, 200)
+      assert.equal(res.headers.get('Content-Type'), 'image/png')
     } finally {
       await rm(dir, { recursive: true, force: true })
     }

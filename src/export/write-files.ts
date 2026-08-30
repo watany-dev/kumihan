@@ -1,13 +1,15 @@
-import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 
 import { contained, resolveManuscriptFile } from '../manuscript-path.js'
+import { toManuscript, type Manuscript } from '../manuscript.js'
 import { unescapeHtml } from '../markdown/escape.js'
 import { renderMarkdown } from '../markdown/render.js'
 import { exportSite } from './export-site.js'
 
-export async function writeExport(source: string, outDir: string): Promise<string[]> {
-  const markdown = await readFile(source, 'utf8')
+export async function writeExport(source: string | Manuscript, outDir: string): Promise<string[]> {
+  const manuscript = toManuscript(source)
+  const markdown = await manuscript.read()
 
   // 書き出しは互いに独立しているので、直列に待たずまとめて実行する。
   const written = await Promise.all(
@@ -20,7 +22,7 @@ export async function writeExport(source: string, outDir: string): Promise<strin
       return dest
     }),
   )
-  const root = dirname(resolve(source))
+  const root = manuscript.root
   const destRoot = resolve(outDir)
   const copied: string[] = []
   for (const match of renderMarkdown(markdown).matchAll(/<img src="([^"]*)"/g)) {
