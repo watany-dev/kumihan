@@ -17,23 +17,28 @@ export function paginate(html: string, linesPerPage: number): string[] {
     return ['']
   }
 
-  const pages: string[][] = []
-  let current: string[] = []
+  // 頁は文字列のまま組み立てます。いったん string[][] に貯めてから join すると、
+  // 頁ごとの配列と、その中身をつないだ文字列を二重に持つことになります。
+  const pages: string[] = []
+  let current = ''
+  let empty = true
   let used = 0
 
   for (const block of blocks) {
     const lines = lineCount(block)
-    if (current.length > 0 && used + lines > linesPerPage) {
+    if (!empty && used + lines > linesPerPage) {
       pages.push(current)
-      current = []
+      current = ''
+      empty = true
       used = 0
     }
-    current.push(block)
+    current = empty ? block : `${current}\n${block}`
+    empty = false
     used += lines
   }
   pages.push(current)
 
-  return pages.map((page) => page.join('\n'))
+  return pages
 }
 
 /**
@@ -53,7 +58,18 @@ export function paginate(html: string, linesPerPage: number): string[] {
  * あれば 1 行、`<br>` はそこで行を終える、囲みタグだけの行は数えません。
  * 折り返しは相変わらず見ません（見るには字幅が要ります）。
  */
+// 行を増やしうるもの（改行と `<br>`）。タグ名は下の走査と同じく大小を区別しません。
+const BREAKS_LINE = /\n|<br/i
+
 function lineCount(html: string): number {
+  // ブロックの大半は改行も `<br>` も無い 1 行の段落や見出しです。そのときは
+  // 下の走査がどう転んでも答えは 1 なので（中身があれば 1、無くても最後に 1 に
+  // 切り上げる）、文字を 1 つずつ読まずに済ませます。indexOf は 1 文字ずつの
+  // ループより桁で速く、ここは HTML 全体を舐める場所でした。
+  if (!BREAKS_LINE.test(html)) {
+    return 1
+  }
+
   let lines = 0
   let visible = false
   let inTag = false
@@ -139,49 +155,68 @@ function elementEnd(html: string, start: number): number {
   if (gt === -1) {
     return html.length
   }
-  const name = tagName(html, start + 1)
+  // タグ名は html の中の範囲として持ちます。切り出して toLowerCase すると、
+  // ブロックごとに短い文字列を 2 つ捨てることになり、GC がそのぶん回ります。
+  let nameStart = start + 1
+  if (html.charCodeAt(nameStart) === 0x2f) {
+    nameStart += 1
+  }
+  const nameEnd = tagNameEnd(html, nameStart)
   if (
-    name.length === 0 ||
-    name === 'hr' ||
-    name === 'br' ||
-    name === 'img' ||
+    nameEnd === nameStart ||
+    isName(html, nameStart, nameEnd, 'hr') ||
+    isName(html, nameStart, nameEnd, 'br') ||
+    isName(html, nameStart, nameEnd, 'img') ||
     html.charCodeAt(gt - 1) === 0x2f
   ) {
     return gt + 1
   }
+  const nameLength = nameEnd - nameStart
 
-  const open = `<${name}`
-  const close = `</${name}>`
+  // 同じ名前の開きタグと閉じタグを、`<` を 1 つずつ辿って数えます。
+  //
+  // もとは `indexOf('<name')` と `indexOf('</name>')` を交互に呼んでいました。
+  // 閉じタグがすぐ先にあっても、開きタグの探索は次の同名タグまで（無ければ
+  // 原稿の末尾まで）走ります。原稿にひとつしかない見出しなどでは、その 1 ブロック
+  // ごとに全体を走ることになり、ブロック数に対して二乗時間でした。CPU profile
+  // では、この関数だけで組版全体の 1/4 を使っていました。
+  //
+  // 走査を要素の内側に閉じ込めると、全体の走査量は HTML の長さに比例します。
   let depth = 1
   let i = gt + 1
-  while (depth > 0) {
-    const nextClose = html.indexOf(close, i)
-    if (nextClose === -1) {
+  while (i < html.length) {
+    const lt = html.indexOf('<', i)
+    if (lt === -1) {
       return html.length
     }
-    const nextOpen = html.indexOf(open, i)
-    if (nextOpen !== -1 && nextOpen < nextClose && isNameEnd(html, nextOpen + open.length)) {
+
+    if (html.charCodeAt(lt + 1) === 0x2f) {
+      // `</name>` だけを閉じとみなします（`</names>` は別の要素）。
+      if (
+        sameTag(html, lt + 2, nameStart, nameLength) &&
+        html.charCodeAt(lt + 2 + nameLength) === 0x3e
+      ) {
+        depth -= 1
+        if (depth === 0) {
+          return lt + 2 + nameLength + 1
+        }
+      }
+    } else if (sameTag(html, lt + 1, nameStart, nameLength)) {
       depth += 1
-      i = nextOpen + open.length
-      continue
     }
-    depth -= 1
-    i = nextClose + close.length
+    i = lt + 1
   }
-  return i
+  return html.length
 }
 
-function tagName(html: string, from: number): string {
-  let i = from
-  if (html.charCodeAt(i) === 0x2f) {
-    i += 1
-  }
-  const first = html.charCodeAt(i) | 0x20
+// from から始まるタグ名の終端。タグ名でなければ from をそのまま返します。
+function tagNameEnd(html: string, from: number): number {
+  const first = html.charCodeAt(from) | 0x20
   if (first < 0x61 || first > 0x7a) {
-    return ''
+    return from
   }
-  const start = i
-  i += 1
+
+  let i = from + 1
   while (i < html.length) {
     const c = html.charCodeAt(i)
     const lower = c | 0x20
@@ -190,10 +225,29 @@ function tagName(html: string, from: number): string {
     }
     i += 1
   }
-  return html.slice(start, i).toLowerCase()
+  return i
 }
 
-function isNameEnd(html: string, index: number): boolean {
-  const c = html.charCodeAt(index)
-  return c === 0x3e || c === 0x20 || c === 0x2f || c === 0x0a || c === 0x09 || c === 0x0d
+// html の [start, end) が name かどうか。大小は区別しません。
+function isName(html: string, start: number, end: number, name: string): boolean {
+  if (end - start !== name.length) {
+    return false
+  }
+  for (let i = 0; i < name.length; i += 1) {
+    if ((html.charCodeAt(start + i) | 0x20) !== name.charCodeAt(i)) {
+      return false
+    }
+  }
+  return true
+}
+
+// at から始まるタグ名が、nameStart から nameLength 文字の名前と同じかどうか。
+function sameTag(html: string, at: number, nameStart: number, nameLength: number): boolean {
+  for (let i = 0; i < nameLength; i += 1) {
+    if ((html.charCodeAt(at + i) | 0x20) !== (html.charCodeAt(nameStart + i) | 0x20)) {
+      return false
+    }
+  }
+  const after = html.charCodeAt(at + nameLength)
+  return after === 0x3e || after === 0x20 || after === 0x2f
 }
