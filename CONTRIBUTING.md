@@ -47,6 +47,8 @@ GitHub Codespaces と Dev Container は Bun と Vite+ を入れ、`vp install --
 
 `bun run dev` と `kumihan serve` の既定は `127.0.0.1:3000` です。Codespaces では `--host 0.0.0.0`、ソースから動かすときは `KUMIHAN_HOST` で広げます。listen に失敗したときは理由を 1 行で出して終了します。
 
+待ち受けを広げても、答えるのは Host ヘッダが自分の名前のリクエストだけです（DNS リバインディング対策。`src/security/host.ts`）。IP リテラルと `localhost` / `*.localhost`、`--host` / `KUMIHAN_HOST` に渡した名前、Codespaces の `GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN` は通り、それ以外の名前は `KUMIHAN_ALLOWED_HOSTS`（カンマ区切り、`.example.com` で接尾辞）で足します。合わない Host には原稿を読まずに 403 を返します。
+
 ## API
 
 renderer は Hono と filesystem から独立しています。

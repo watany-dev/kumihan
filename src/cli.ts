@@ -3,6 +3,7 @@ import { parseArgs } from 'node:util'
 import { createPreviewApp } from './app.js'
 import { writeExport } from './export/write-files.js'
 import { createNodeServer, describeListenError } from './node-server.js'
+import { createHostPolicy } from './security/host.js'
 
 const VERSION = '0.1.0'
 const USAGE = `kumihan ${VERSION}
@@ -73,7 +74,14 @@ if (command === 'export') {
     console.error(`invalid --port: ${portValue}`)
     process.exit(1)
   }
-  const server = createNodeServer(createPreviewApp({ source }))
+  // Host が自分の名前のときだけ原稿を返します（DNS リバインディング対策）。
+  // 詳しくは src/security/host.ts を参照。
+  const hostPolicy = createHostPolicy({
+    host,
+    allowed: process.env['KUMIHAN_ALLOWED_HOSTS'],
+    portForwardingDomain: process.env['GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN'],
+  })
+  const server = createNodeServer(createPreviewApp({ source }), hostPolicy)
   // listen の失敗は例外ではなくイベントで届きます。受け取らないと、使えない
   // ホスト名や埋まっているポートを指定しただけで内部のスタックが出ます。
   server.on('error', (error) => {
