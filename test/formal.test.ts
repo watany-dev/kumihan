@@ -6,7 +6,7 @@ import { escapeHtml, sanitizeImageUrl, sanitizeUrl, unescapeHtml } from '../src/
 import { HARD_BREAK } from '../src/markdown/hard-break.js'
 import { renderInline } from '../src/markdown/inline.js'
 import { renderMarkdown } from '../src/markdown/render.js'
-import { paginate } from '../src/typesetting/paginate.js'
+import { MAGAZINE_MEASURE, paginate } from '../src/typesetting/paginate.js'
 
 // ファジングは「たまたま当たった入力」を試します。ここでは逆に、記法を作る
 // 記号だけの小さなアルファベットを決めて、その長さまでの入力を *全部* 通します。
@@ -144,7 +144,7 @@ describe('数え上げ検査: 出力に注入は現れない', () => {
         // 頁分けは出来上がった HTML を切り分けます。要素の途中で切ると
         // 属性の外に文字が出てしまうので、切ったあとも同じ性質を求めます。
         for (const perPage of [1, 3]) {
-          for (const page of paginate(html, perPage)) {
+          for (const page of paginate(html, perPage, MAGAZINE_MEASURE)) {
             assert.deepEqual(
               injections(page),
               [],

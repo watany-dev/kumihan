@@ -3,9 +3,12 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'vite-plus/test'
 
 import { renderMarkdown } from '../src/markdown/render.js'
+import type { Measure } from '../src/typesetting/paginate.js'
 import {
   MAGAZINE_LINES_PER_PAGE,
+  MAGAZINE_MEASURE,
   PRINT_LINES_PER_PAGE,
+  PRINT_MEASURE,
   paginate,
 } from '../src/typesetting/paginate.js'
 import { renderDocument, type PreviewMode } from '../src/typesetting/render-page.js'
@@ -138,8 +141,14 @@ describe('typesetting fuzzing', () => {
       const html = renderMarkdown(source)
       const context = `seed ${seed} / 入力 ${JSON.stringify(source.slice(0, 200))}`
 
-      for (const size of [1, PRINT_LINES_PER_PAGE, MAGAZINE_LINES_PER_PAGE]) {
-        const pages = paginate(html, size)
+      // 字詰を渡す経路（実際の組版）と、渡さない経路の両方を通します。
+      const layouts: [number, Measure | undefined][] = [
+        [1, undefined],
+        [PRINT_LINES_PER_PAGE, PRINT_MEASURE],
+        [MAGAZINE_LINES_PER_PAGE, MAGAZINE_MEASURE],
+      ]
+      for (const [size, measure] of layouts) {
+        const pages = paginate(html, size, measure)
         assert.ok(pages.length > 0, context)
         const joined = pages.join('\n')
         assert.equal(textOnly(joined), textOnly(html), `${size} 行: 本文が変わった。${context}`)

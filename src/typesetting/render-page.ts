@@ -1,6 +1,12 @@
 import { escapeHtml } from '../markdown/escape.js'
 import { documentSecurityMeta } from '../security/headers.js'
-import { MAGAZINE_LINES_PER_PAGE, PRINT_LINES_PER_PAGE, paginate } from './paginate.js'
+import {
+  MAGAZINE_LINES_PER_PAGE,
+  MAGAZINE_MEASURE,
+  PRINT_LINES_PER_PAGE,
+  PRINT_MEASURE,
+  paginate,
+} from './paginate.js'
 
 export type PreviewMode = 'print' | 'magazine' | 'web'
 
@@ -52,13 +58,13 @@ ${html}
   if (mode === 'magazine') {
     return `<body>
   ${modeSwitcher(mode)}
-${renderPapers(paginate(html, MAGAZINE_LINES_PER_PAGE), 'typeset cols-2')}
+${renderPapers(paginate(html, MAGAZINE_LINES_PER_PAGE, MAGAZINE_MEASURE), 'typeset cols-2')}
 </body>`
   }
 
   return `<body>
   ${modeSwitcher(mode)}
-${renderPapers(paginate(html, PRINT_LINES_PER_PAGE), 'typeset')}
+${renderPapers(paginate(html, PRINT_LINES_PER_PAGE, PRINT_MEASURE), 'typeset')}
 </body>`
 }
 
