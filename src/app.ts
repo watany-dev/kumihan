@@ -183,7 +183,11 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
     if (settleTimer !== null) return
     settleTimer = setTimeout(() => {
       settleTimer = null
-      void broadcastIfChanged()
+      // serveManuscript と違って catch する枠が無い経路。変換が万一投げても
+      // 未処理 rejection でプレビューごと落とさず、記録だけして生かしておく。
+      broadcastIfChanged().catch((error: unknown) => {
+        console.error('[kumihan] Failed to broadcast a manuscript change:', error)
+      })
     }, WATCH_SETTLE_MS)
   }
 
