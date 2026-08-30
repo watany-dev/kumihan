@@ -26,6 +26,7 @@ body {
 }
 
 .paper {
+  position: relative;
   width: 210mm;
   min-height: 297mm;
   margin: 12mm auto;
@@ -33,6 +34,43 @@ body {
   background: #ffffff;
   color: #1a1a1a;
   box-shadow: 0 1.2mm 6mm rgba(40, 30, 20, 0.22);
+}
+
+/*
+ * 柱（上）とノンブル（下）。版面の外、上 22mm / 下 24mm の余白の中に置くので
+ * 本文とは重なりません。柱の無い 1 枚目は data-head が無く、::before は
+ * そもそも作られません。@media print で消していないので印刷にも残ります。
+ */
+.paper::before,
+.paper::after {
+  position: absolute;
+  left: 20mm;
+  right: 20mm;
+  text-align: center;
+  font-family:
+    "Hiragino Mincho ProN",
+    "Yu Mincho",
+    "YuMincho",
+    "Noto Serif CJK JP",
+    serif;
+  color: #6b6459;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.paper[data-head]::before {
+  content: attr(data-head);
+  top: 11mm;
+  font-size: 8.5pt;
+  letter-spacing: 0.08em;
+}
+
+.paper::after {
+  content: attr(data-page);
+  bottom: 11mm;
+  font-size: 9pt;
+  letter-spacing: 0.04em;
 }
 
 .typeset {
