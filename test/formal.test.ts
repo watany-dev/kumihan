@@ -58,9 +58,11 @@ const SAFE_SRC_SCHEME = new Set(['http', 'https'])
 // sanitizeUrl の実装ではなく、通したくない相手の側から書いています。
 function browserScheme(url: string): string | null {
   const stripped = url.replaceAll(/[\t\n\r]/g, '')
+  // ブラウザが実際に削る範囲を写しているので、制御文字は意図どおりです。
+  // oxlint-disable-next-line no-control-regex
   const trimmed = stripped.replaceAll(/^[\u0000-\u0020]+|[\u0000-\u0020]+$/g, '')
   const match = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(trimmed)
-  return match === null ? null : (match[1] as string).toLowerCase()
+  return match === null ? null : (match[1] ?? '').toLowerCase()
 }
 
 /** 出力に紛れ込んだ、renderer が出したのではない HTML を挙げます。 */
@@ -76,13 +78,13 @@ function injections(html: string): string[] {
 
     const opening = /^<\/?([a-zA-Z][a-zA-Z0-9]*)/.exec(html.slice(i))
     if (opening === null) return [`タグにならない '<' が残った (${i})`]
-    const name = (opening[1] as string).toLowerCase()
+    const name = (opening[1] ?? '').toLowerCase()
     const attributes = ELEMENTS.get(name)
     if (attributes === undefined) return [`知らない要素 <${name}> (${i})`]
     const closing = html.charAt(i + 1) === '/'
     if (closing && VOID_ELEMENTS.has(name)) return [`空要素に閉じタグ </${name}>`]
 
-    let j = i + (opening[0] as string).length
+    let j = i + opening[0].length
     while (j < html.length && html.charAt(j) !== '>') {
       if (html.charAt(j) === ' ') {
         j += 1
@@ -90,8 +92,8 @@ function injections(html: string): string[] {
       }
       const attribute = /^([a-zA-Z-]+)="([^"]*)"/.exec(html.slice(j))
       if (attribute === null) return [`属性の形になっていない (${j})`]
-      const attributeName = (attribute[1] as string).toLowerCase()
-      const value = attribute[2] as string
+      const attributeName = (attribute[1] ?? '').toLowerCase()
+      const value = attribute[2] ?? ''
       if (closing || !attributes.has(attributeName)) {
         return [`<${name}> に許していない属性 ${attributeName}`]
       }
@@ -102,7 +104,7 @@ function injections(html: string): string[] {
           return [`${attributeName} に ${scheme}: が入った (${JSON.stringify(value)})`]
         }
       }
-      j += (attribute[0] as string).length
+      j += attribute[0].length
     }
     if (j >= html.length) return [`閉じられていないタグ <${name}>`]
     i = j + 1
@@ -176,11 +178,13 @@ function referenceEscapeHtml(text: string): string {
 function referenceSanitizeUrl(url: string): string {
   const trimmed = url.trim()
   if (trimmed.length === 0) return '#'
+  // 制御文字を弾くのが目的の判定です。
+  // oxlint-disable-next-line no-control-regex
   if (/[\u0000-\u001f\u007f]/.test(trimmed)) return '#'
   const compact = trimmed.replaceAll(/\s+/g, '')
   const match = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(compact)
   if (match === null) return trimmed
-  return SAFE_HREF_SCHEME.has((match[1] as string).toLowerCase()) ? trimmed : '#'
+  return SAFE_HREF_SCHEME.has((match[1] ?? '').toLowerCase()) ? trimmed : '#'
 }
 
 function referenceSanitizeImageUrl(url: string): string {
@@ -188,7 +192,7 @@ function referenceSanitizeImageUrl(url: string): string {
   if (sanitized.startsWith('#')) return '#'
   const match = /^([a-zA-Z][a-zA-Z0-9+.-]*):/.exec(sanitized.replaceAll(/\s+/g, ''))
   if (match === null) return sanitized
-  return SAFE_SRC_SCHEME.has((match[1] as string).toLowerCase()) ? sanitized : '#'
+  return SAFE_SRC_SCHEME.has((match[1] ?? '').toLowerCase()) ? sanitized : '#'
 }
 
 describe('詳細化検査: 手書きの走査は正規表現と同じ答えを出す', () => {
@@ -238,11 +242,7 @@ describe('詳細化検査: 手書きの走査は正規表現と同じ答えを�
     ]
     enumerate(alphabet, 3, (input) => {
       assert.equal(sanitizeUrl(input), referenceSanitizeUrl(input), JSON.stringify(input))
-      assert.equal(
-        sanitizeImageUrl(input),
-        referenceSanitizeImageUrl(input),
-        JSON.stringify(input),
-      )
+      assert.equal(sanitizeImageUrl(input), referenceSanitizeImageUrl(input), JSON.stringify(input))
     })
   })
 })
