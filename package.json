@@ -16,7 +16,7 @@
     "fmt": "vp fmt",
     "knip": "knip",
     "lint": "vp lint",
-    "test": "vp test",
+    "test": "vp test --reporter=agent --silent=passed-only",
     "test:coverage": "vp test --coverage"
   },
   "dependencies": {
