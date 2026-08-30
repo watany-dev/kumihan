@@ -12,13 +12,6 @@ export interface Manuscript {
   read(): Promise<string>
 }
 
-export function fileManuscript(path: string): Manuscript {
-  return {
-    root: dirname(resolve(path)),
-    read: () => readFile(path, 'utf8'),
-  }
-}
-
 /**
  * すでに手元にある本文を原稿として扱います。標準入力には元ファイルの場所が
  * 無いので、画像の相対パスはカレントディレクトリから探します。
@@ -32,5 +25,9 @@ export function memoryManuscript(markdown: string, root: string = process.cwd())
 }
 
 export function toManuscript(source: string | Manuscript): Manuscript {
-  return typeof source === 'string' ? fileManuscript(source) : source
+  if (typeof source !== 'string') return source
+  return {
+    root: dirname(resolve(source)),
+    read: () => readFile(source, 'utf8'),
+  }
 }

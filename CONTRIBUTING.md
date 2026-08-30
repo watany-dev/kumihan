@@ -73,12 +73,11 @@ const app = createPreviewApp({
 
 ```ts
 import { memoryManuscript } from './src/manuscript.ts'
-import { readStdin } from './src/stdin.ts'
 import { writeExport } from './src/export/write-files.ts'
 
 // root を省くと process.cwd() から画像を探します。
-const manuscript = memoryManuscript(await readStdin(), 'content')
-await writeExport(manuscript, 'dist')
+const stdin = Buffer.concat(await process.stdin.toArray()).toString('utf8')
+await writeExport(memoryManuscript(stdin, 'content'), 'dist')
 ```
 
 ## ベンチマーク

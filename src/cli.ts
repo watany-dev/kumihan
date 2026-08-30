@@ -1,22 +1,17 @@
+import { Buffer } from 'node:buffer'
 import { parseArgs } from 'node:util'
 
 import { createPreviewApp } from './app.js'
 import { writeExport } from './export/write-files.js'
-import { fileManuscript, memoryManuscript, type Manuscript } from './manuscript.js'
+import { memoryManuscript, type Manuscript } from './manuscript.js'
 import { createNodeServer, describeListenError } from './node-server.js'
 import { createHostPolicy } from './security/host.js'
-import { readStdin } from './stdin.js'
 
 const VERSION = '0.1.0'
 const USAGE = `kumihan ${VERSION}
   kumihan serve [file|-]    # content/index.md, 127.0.0.1:3000
   kumihan export [file|-]   # --out dist
-
-\`-\` は標準入力から原稿を読みます。ファイルを省略したときも、標準入力が
-端末でなければ（パイプやリダイレクト）そちらを読みます。画像の相対パスは
-カレントディレクトリから探します。`
-
-const DEFAULT_SOURCE = 'content/index.md'
+  \`-\` か端末以外の標準入力から読むときは、画像はカレントディレクトリから探します`
 
 let values: {
   help: boolean
@@ -56,22 +51,17 @@ if (values.version) {
 
 const command = positionals[0]
 const arg = positionals[1]
-const source = arg ?? DEFAULT_SOURCE
+const source = arg ?? 'content/index.md'
 
 // `-` なら必ず標準入力。省略時も、端末以外（パイプやリダイレクト）が
 // つながっていれば読みます。
 const explicitStdin = arg === '-'
-let manuscript: Manuscript = fileManuscript(source)
-const readsManuscript = command === 'export' || command === 'serve'
-if (readsManuscript && (explicitStdin || (arg === undefined && !process.stdin.isTTY))) {
-  let piped: string
-  try {
-    piped = await readStdin()
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error)
-    console.error(`標準入力を読めません: ${detail}`)
-    process.exit(1)
-  }
+let manuscript: string | Manuscript = source
+if (
+  (command === 'export' || command === 'serve') &&
+  (explicitStdin || (arg === undefined && !process.stdin.isTTY))
+) {
+  const piped = Buffer.concat(await process.stdin.toArray()).toString('utf8')
   if (piped.trim().length > 0) {
     manuscript = memoryManuscript(piped)
   } else if (explicitStdin) {
