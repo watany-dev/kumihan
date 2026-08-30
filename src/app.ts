@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 
 import { Hono, type Context } from 'hono'
@@ -80,16 +79,18 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
   let cachedVersion = ''
   const cachedDocuments = new Map<PreviewMode, string>()
 
-  function prime(markdown: string): void {
+  async function prime(markdown: string): Promise<void> {
     if (markdown === cachedMarkdown) return
+    // await 明けに別のリクエストが同じ内容で先着していても、結果は同じ。
+    const version = await versionOf(markdown)
     cachedMarkdown = markdown
     cachedFragment = renderMarkdown(markdown)
-    cachedVersion = versionOf(markdown)
+    cachedVersion = version
     cachedDocuments.clear()
   }
 
-  function documentFor(markdown: string, mode: PreviewMode): string {
-    prime(markdown)
+  async function documentFor(markdown: string, mode: PreviewMode): Promise<string> {
+    await prime(markdown)
 
     const cached = cachedDocuments.get(mode)
     if (cached !== undefined) {
@@ -109,7 +110,7 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
   async function serveManuscript(c: Context, mode: PreviewMode) {
     try {
       const markdown = await manuscript.read()
-      const html = documentFor(markdown, mode)
+      const html = await documentFor(markdown, mode)
       return c.body(html, 200, HTML_HEADERS)
     } catch (error) {
       if (isNotFound(error)) {
@@ -151,7 +152,7 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
 
   async function currentVersion(): Promise<string> {
     try {
-      return versionOf(await manuscript.read())
+      return await versionOf(await manuscript.read())
     } catch {
       // 原稿が無い・読めない間は「バージョン無し」。404 ページも空の
       // バージョンで接続してくるので、原稿が現れたときに知らせられます。
@@ -167,14 +168,14 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
       // 保存の瞬間はファイルが一時的に無いこともある。読めない間は
       // 「バージョン無し」として扱い、読めるようになったらまた知らせる。
     }
-    const version = markdown === null ? '' : versionOf(markdown)
+    const version = markdown === null ? '' : await versionOf(markdown)
     if (version === notifiedVersion) return
     notifiedVersion = version
     for (const notify of subscribers) notify(version)
     // 知らせたブラウザはすぐ取りに来ます。先に知らせてから組んでおくと、
     // ブラウザがナビゲーションを始める裏で変換が済み、GET は組み上がった
     // キャッシュで返せます（1MB の原稿で 20ms ほど前倒しになります）。
-    if (markdown !== null) prime(markdown)
+    if (markdown !== null) await prime(markdown)
   }
 
   function onWatchEvent(): void {
@@ -259,8 +260,15 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
   return app
 }
 
-function versionOf(markdown: string): string {
-  return createHash('sha256').update(markdown).digest('hex').slice(0, 16)
+// Web Crypto（globalThis.crypto）。改ざん耐性は要らず、内容が変わったことが
+// 分かればよいので、先頭 8 バイトの 16 進で十分です。
+async function versionOf(markdown: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(markdown))
+  let version = ''
+  for (const byte of new Uint8Array(digest, 0, 8)) {
+    version += byte.toString(16).padStart(2, '0')
+  }
+  return version
 }
 
 function isNotFound(error: unknown): boolean {
