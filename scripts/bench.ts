@@ -29,6 +29,7 @@ const manuscript = Array.from({ length: scale }, () => base).join('\n\n')
 const prose = 'The quick brown fox jumps over the lazy dog. '.repeat(200)
 const inlineRich = '**強調**と*斜体*と`code`と[リンク](https://example.com)。'.repeat(200)
 const plainInline = '組版された日本語の本文がひたすら続くだけの一行です。'.repeat(200)
+const fragment = renderMarkdown(manuscript)
 
 interface Case {
   name: string
@@ -47,10 +48,28 @@ const cases: Case[] = [
   { name: 'renderInline (plain)', bytes: plainInline.length, run: () => renderInline(plainInline) },
   { name: 'renderInline (rich)', bytes: inlineRich.length, run: () => renderInline(inlineRich) },
   { name: 'renderMarkdown', bytes: manuscript.length, run: () => renderMarkdown(manuscript) },
+  // 組版と 2段は頁分け（paginate）を通ります。Web だけを測っていたころは、
+  // 既定の `/` が通る経路がベンチにまったく出てこず、そこにあった二乗時間に
+  // 気づけませんでした。断片は測る前に作っておき、頁分けだけを見ます。
   {
-    name: 'renderDocument (full)',
+    name: 'renderDocument (web)',
     bytes: manuscript.length,
-    run: () => renderDocument(renderMarkdown(manuscript), { mode: 'web' }),
+    run: () => renderDocument(fragment, { mode: 'web' }),
+  },
+  {
+    name: 'renderDocument (print)',
+    bytes: manuscript.length,
+    run: () => renderDocument(fragment, { mode: 'print' }),
+  },
+  {
+    name: 'renderDocument (magazine)',
+    bytes: manuscript.length,
+    run: () => renderDocument(fragment, { mode: 'magazine' }),
+  },
+  {
+    name: 'markdown + print',
+    bytes: manuscript.length,
+    run: () => renderDocument(renderMarkdown(manuscript), { mode: 'print' }),
   },
 ]
 

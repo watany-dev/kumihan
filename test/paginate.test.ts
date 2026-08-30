@@ -103,6 +103,18 @@ describe('paginate', () => {
   it('takes the rest of the input when a tag is unclosed', () => {
     assert.equal(paginate('<p>閉じない', MAGAZINE_LINES_PER_PAGE)[0], '<p>閉じない')
     assert.equal(paginate('<p', MAGAZINE_LINES_PER_PAGE)[0], '<p')
+    // 閉じタグを探しているあいだに `<` だけが残って入力が尽きる形。
+    assert.equal(paginate('<p>あと<', MAGAZINE_LINES_PER_PAGE)[0], '<p>あと<')
+  })
+
+  it('does not read a non-name after < as a tag', () => {
+    // `<` の次がタグ名でなければ、その `>` までで 1 ブロック。閉じは探しません。
+    assert.deepEqual(paginate('<1>本文', MAGAZINE_LINES_PER_PAGE), ['<1>\n本文'])
+    assert.deepEqual(paginate('< p>本文', MAGAZINE_LINES_PER_PAGE), ['< p>\n本文'])
+  })
+
+  it('starts a block at a stray closing tag', () => {
+    assert.equal(paginate('</p>あと', MAGAZINE_LINES_PER_PAGE)[0], '</p>あと')
   })
 
   it('counts the lines a block is actually set in', () => {

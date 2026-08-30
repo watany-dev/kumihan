@@ -139,8 +139,11 @@ function alignmentOf(cell: string): TableAlign | undefined {
   return null
 }
 
+// `\|` を含むセルはめったにありません。replaceAll は一致が無くても文字列全体を
+// 走査したうえで、返す前に内部表現を確かめます。`\` の有無を先に見ておけば、
+// ふつうの表では走査そのものを省けます。
 function unescapePipes(cell: string): string {
-  return cell.replaceAll('\\|', '|')
+  return cell.indexOf('\\') === -1 ? cell : cell.replaceAll('\\|', '|')
 }
 
 function renderTable(

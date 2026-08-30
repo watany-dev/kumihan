@@ -150,27 +150,37 @@ function append(blocks: string, html: string): string {
   return blocks.length === 0 ? html : `${blocks}\n${html}`
 }
 
-const HEADING = /^(#{1,3}) (.+)$/
+/**
+ * `/^(#{1,3}) (.+)$/` と同じ判定で、見出しの段（`#` の数）を返します。
+ * 見出しでなければ 0。本文が始まる位置は必ず `level + 1` です。
+ *
+ * `#` は 1〜3 個、そのあとに空白 1 つ、そして中身が 1 文字以上。正規表現だと
+ * 一致のたびに配列と 2 つの部分文字列を確保しますが、この形なら文字コードを
+ * 4 回読むだけで済みます。見出しが多い原稿では、ここが変換全体の数 % でした。
+ */
+function headingLevel(line: string): number {
+  let level = 0
+  while (level < 4 && line.charCodeAt(level) === HASH) {
+    level += 1
+  }
+  if (level === 0 || level > 3) return 0
+  if (line.charCodeAt(level) !== SPACE) return 0
+  return line.length > level + 1 ? level : 0
+}
 
 // 見出しになりうるのは `#` で始まる行だけです。この 1 文字を先に見ておくと、
-// 段落の各行に見出しの正規表現を当てずに済みます。
+// 段落の各行に見出しの判定を通さずに済みます。
 function isHeadingLine(line: string): boolean {
-  return line.charCodeAt(0) === HASH && HEADING.test(line)
+  return line.charCodeAt(0) === HASH && headingLevel(line) > 0
 }
 
 // 呼び出し元は行が `#` で始まることを確かめています。
 function parseHeading(line: string): string | null {
-  const match = HEADING.exec(line)
-  if (!match) {
+  const level = headingLevel(line)
+  if (level === 0) {
     return null
   }
-
-  const markers = match[1]
-  const text = match[2]
-  /* v8 ignore next -- the heading regex always captures both groups */
-  if (markers === undefined || text === undefined) return null
-  const level = markers.length
-  return `<h${level}>${renderInline(text.trim())}</h${level}>`
+  return `<h${level}>${renderInline(line.slice(level + 1).trim())}</h${level}>`
 }
 
 const BLANK = /^\s*$/
