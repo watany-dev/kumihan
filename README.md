@@ -32,6 +32,13 @@ chmod +x kumihan
 ./kumihan export manuscript.md --out dist
 ```
 
+原稿はパイプでも渡せます。`-` は標準入力を読みます。
+
+```bash
+cat manuscript.md | ./kumihan serve -
+pandoc draft.docx -t gfm | ./kumihan export - --out dist
+```
+
 | ファイル                                      | 対象    |
 | --------------------------------------------- | ------- |
 | `kumihan-linux-x64` / `kumihan-linux-arm64`   | Linux   |
@@ -116,15 +123,28 @@ dist/
    └─ web.css
 ```
 
+## 標準入力
+
+`-` を渡すと標準入力から原稿を読みます。ファイルを省略したときも、標準入力が端末でなければ（パイプやリダイレクト）そちらを読みます。何も流れてこなければ既定の `content/index.md` に戻ります。
+
+```bash
+cat manuscript.md | ./kumihan export - --out dist
+cat manuscript.md | ./kumihan serve          # `-` は省略できます
+```
+
+標準入力には元のファイルの場所が無いので、`![alt](shot.png)` のような相対パスは**カレントディレクトリ**から探します。画像を含む原稿を流し込むときは、その画像があるディレクトリで実行してください。
+
+`serve` に流し込んだ原稿はメモリに保持するので、プレビューは起動時の内容のまま変わりません。編集しながら見るときはファイルパスを渡してください。
+
 `main` への push で GitHub Actions が検査したあと GitHub Pages へ載せます。リポジトリの Pages 設定は **GitHub Actions** を選んでください。
 
 ## コマンド
 
-| コマンド                | 内容                                                      |
-| ----------------------- | --------------------------------------------------------- |
-| `kumihan serve [file]`  | プレビューを起動する。既定の原稿は `content/index.md`     |
-| `kumihan export [file]` | `dist/*.html` と CSS を生成する。`--out` で出力先を変える |
-| `bun run dev`           | リポジトリの `content/index.md` をプレビューする          |
-| `bun run export`        | リポジトリの原稿を `dist/` へ書き出す                     |
+| コマンド                   | 内容                                                      |
+| -------------------------- | --------------------------------------------------------- |
+| `kumihan serve [file\|-]`  | プレビューを起動する。既定の原稿は `content/index.md`     |
+| `kumihan export [file\|-]` | `dist/*.html` と CSS を生成する。`--out` で出力先を変える |
+| `bun run dev`              | リポジトリの `content/index.md` をプレビューする          |
+| `bun run export`           | リポジトリの原稿を `dist/` へ書き出す                     |
 
 開発（テスト、lint、ベンチ、内部 API）は [CONTRIBUTING.md](CONTRIBUTING.md) を見てください。脆弱性の報告は [SECURITY.md](SECURITY.md) です。

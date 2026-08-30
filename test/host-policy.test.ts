@@ -38,7 +38,7 @@ describe('host policy', () => {
       'evil.example/assets/web.css?',
       'user@evil.example',
       '999.999.999.999',
-      `${"a".repeat(256)}.example`,
+      `${'a'.repeat(256)}.example`,
     ]) {
       assert.equal(isAllowedHost(host, LOOPBACK_HOST_POLICY), false, host)
     }

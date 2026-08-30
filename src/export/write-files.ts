@@ -1,13 +1,15 @@
-import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 
 import { contained, resolveManuscriptFile } from '../manuscript-path.js'
+import { toManuscript, type ManuscriptSource } from '../manuscript.js'
 import { unescapeHtml } from '../markdown/escape.js'
 import { renderMarkdown } from '../markdown/render.js'
 import { exportSite } from './export-site.js'
 
-export async function writeExport(source: string, outDir: string): Promise<string[]> {
-  const markdown = await readFile(source, 'utf8')
+export async function writeExport(source: ManuscriptSource, outDir: string): Promise<string[]> {
+  const manuscript = toManuscript(source)
+  const markdown = await manuscript.read()
 
   // 書き出しは互いに独立しているので、直列に待たずまとめて実行する。
   const written = await Promise.all(
@@ -20,7 +22,6 @@ export async function writeExport(source: string, outDir: string): Promise<strin
       return dest
     }),
   )
-  const root = dirname(resolve(source))
   const destRoot = resolve(outDir)
   const copied: string[] = []
   for (const match of renderMarkdown(markdown).matchAll(/<img src="([^"]*)"/g)) {
@@ -30,7 +31,7 @@ export async function writeExport(source: string, outDir: string): Promise<strin
     // 出るのに書き出しにだけ画像が無い、という食い違いになります。
     const src = unescapeHtml(match[1] ?? '')
     if (src.length === 0 || src.startsWith('#') || /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(src)) continue
-    const from = await resolveManuscriptFile(root, src)
+    const from = await resolveManuscriptFile(manuscript.root, src)
     if (from === null) {
       console.error(`[kumihan] 画像が見つかりません: ${src}`)
       continue

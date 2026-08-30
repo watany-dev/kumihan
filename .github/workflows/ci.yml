@@ -62,6 +62,8 @@ jobs:
           test -f /tmp/kumihan-export/index.html
           test -f /tmp/kumihan-export/magazine.html
           test -f /tmp/kumihan-export/web.html
+          echo '# hi' | ./dist-bin/kumihan export - --out /tmp/kumihan-stdin
+          test -f /tmp/kumihan-stdin/index.html
 
   workflow-audit:
     name: Workflow audit

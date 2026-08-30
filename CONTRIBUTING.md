@@ -69,6 +69,17 @@ const app = createPreviewApp({
 })
 ```
 
+原稿の取り出し方は `src/manuscript.ts` の `Manuscript`（`root` と `read()`）にまとめてあります。`createPreviewApp` と `writeExport` はパスの文字列も `Manuscript` も受け取ります。標準入力のように元ファイルが無い原稿は `memoryManuscript` で包み、画像の基準ディレクトリを明示します。
+
+```ts
+import { memoryManuscript } from './src/manuscript.ts'
+import { writeExport } from './src/export/write-files.ts'
+
+// root を省くと process.cwd() から画像を探します。
+const stdin = Buffer.concat(await process.stdin.toArray()).toString('utf8')
+await writeExport(memoryManuscript(stdin, 'content'), 'dist')
+```
+
 ## ベンチマーク
 
 ```bash

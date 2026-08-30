@@ -1,9 +1,9 @@
 import { readFile } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
 
 import { Hono, type Context } from 'hono'
 
 import { imageContentType, resolveManuscriptFile } from './manuscript-path.js'
+import { toManuscript, type ManuscriptSource } from './manuscript.js'
 import { renderMarkdown } from './markdown/render.js'
 import { documentSecurityMeta, previewSecureHeaders } from './security/headers.js'
 import { renderDocument, type PreviewMode } from './typesetting/render-page.js'
@@ -11,7 +11,7 @@ import { typesetCss } from './typesetting/typeset.css.js'
 import { webCss } from './typesetting/web.css.js'
 
 export interface PreviewConfig {
-  source: string
+  source: ManuscriptSource
   title?: string
   language?: string
 }
@@ -31,7 +31,7 @@ const CSS_HEADERS = {
 export function createPreviewApp(config: PreviewConfig = { source: './content/index.md' }): Hono {
   const title = config.title ?? 'Typeset Preview'
   const language = config.language ?? 'ja'
-  const root = dirname(resolve(config.source))
+  const manuscript = toManuscript(config.source)
   const app = new Hono()
   app.use('*', previewSecureHeaders())
 
@@ -48,7 +48,7 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
 
   app.get('/*', async (c) => {
     const rel = c.req.path.slice(1)
-    const file = await resolveManuscriptFile(root, rel)
+    const file = await resolveManuscriptFile(manuscript.root, rel)
     if (file === null) return c.body('', 404)
     const type = imageContentType(rel) ?? imageContentType(file)
     if (type === undefined) return c.body('', 404)
@@ -64,7 +64,7 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
 
   async function serveManuscript(c: Context, mode: PreviewMode) {
     try {
-      const markdown = await readFile(config.source, 'utf8')
+      const markdown = await manuscript.read()
       const html = renderDocument(renderMarkdown(markdown), { title, language, mode })
       return c.body(html, 200, HTML_HEADERS)
     } catch (error) {
