@@ -18,6 +18,29 @@ export function escapeHtml(text: string): string {
   return text.replace(ESCAPABLE_GLOBAL, (character) => ESCAPES[character] ?? character)
 }
 
+const UNESCAPES: Record<string, string> = {
+  '&amp;': '&',
+  '&lt;': '<',
+  '&gt;': '>',
+  '&quot;': '"',
+  '&#39;': "'",
+}
+
+const ESCAPED = /&(?:amp|lt|gt|quot|#39);/g
+
+/**
+ * escapeHtml の逆。書き出しで `<img src="...">` から元のパスを取り戻すために
+ * 使います。escapeHtml が作る 5 つの実体参照だけを戻すので、`&amp;amp;` は
+ * `&amp;` に戻り、二重に外れることはありません。
+ */
+export function unescapeHtml(text: string): string {
+  if (!text.includes('&')) {
+    return text
+  }
+  /* v8 ignore next -- the pattern only matches keys of UNESCAPES */
+  return text.replace(ESCAPED, (entity) => UNESCAPES[entity] ?? entity)
+}
+
 /**
  * C0 制御文字を含むなら true。あわせて、空白を含むかどうかも返します。
  *

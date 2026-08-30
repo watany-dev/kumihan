@@ -16,6 +16,16 @@ function papers(html: string, articleClass: string): string[] {
   ].map((match) => match[1] ?? '')
 }
 
+// 「何行と数えたか」は、後ろに 1 行の段落を並べて何個同じ頁に入るかで分かります。
+// 頁の大きさを 100 行にしておけば、入った段落の数を 100 から引いた値が
+// その原稿の行数です。
+function countedLines(markdown: string): number {
+  const size = 100
+  const filler = Array.from({ length: size }, () => 'x').join('\n\n')
+  const first = paginate(renderMarkdown(`${markdown}\n\n${filler}`), size)[0] ?? ''
+  return size - (first.match(/<p>x<\/p>/g) ?? []).length
+}
+
 function paragraphs(count: number): string {
   return Array.from({ length: count }, () => '短い段落です。').join('\n\n')
 }
@@ -93,6 +103,39 @@ describe('paginate', () => {
   it('takes the rest of the input when a tag is unclosed', () => {
     assert.equal(paginate('<p>閉じない', MAGAZINE_LINES_PER_PAGE)[0], '<p>閉じない')
     assert.equal(paginate('<p', MAGAZINE_LINES_PER_PAGE)[0], '<p')
+  })
+
+  it('counts the lines a block is actually set in', () => {
+    // 組まれる行数と一致すること。囲みタグ（<ul> や <table>）はそれ自体では
+    // 何も組まれないので数えず、強制改行の <br> は 1 行として数えます。
+    assert.equal(countedLines('ああ'), 1)
+    assert.equal(countedLines('# 見出し'), 1)
+    assert.equal(countedLines('ああ\n\nいい\n\nうう'), 3)
+    assert.equal(countedLines('- a\n- b\n- c\n- d\n- e'), 5)
+    assert.equal(countedLines('1. a\n2. b\n3. c'), 3)
+    assert.equal(countedLines('> a\n>\n> b\n>\n> c'), 3)
+    assert.equal(countedLines('| a | b |\n| --- | --- |\n| 1 | 2 |\n| 3 | 4 |'), 3)
+    assert.equal(countedLines('```\na\nb\nc\n```'), 3)
+    assert.equal(countedLines('![a](b.png)'), 1)
+    assert.equal(countedLines('---'), 1)
+  })
+
+  it('counts a hard break as a line', () => {
+    // 行末 2 スペースの強制改行は HTML の改行を作りません。1 行と数えたままだと、
+    // 高さが 40 行に固定された 2 段組の紙から詩や住所があふれます。
+    assert.equal(countedLines('a  \nb  \nc  \nd  \ne'), 5)
+    const pages = paginate(renderMarkdown('a  \nb  \nc\n\n' + paragraphs(10)), 5)
+    assert.ok(pages.length >= 3)
+    assert.match(pages[0] ?? '', /<p>a<br>b<br>c<\/p>/)
+    // 3 行の段落と 1 行の段落 2 つで 5 行。残りは次の頁へ。
+    assert.equal(((pages[0] ?? '').match(/短い段落です。/g) ?? []).length, 2)
+  })
+
+  it('does not count wrapper tags that set no line', () => {
+    // 5 項目の箇条書きは 5 行。囲みの <ul> と </ul> まで数えると 7 行になり、
+    // 頁が早く切れて紙が空きます。
+    const pages = paginate(renderMarkdown(`- a\n- b\n- c\n- d\n- e\n\n${paragraphs(3)}`), 8)
+    assert.equal(pages.length, 1)
   })
 
   it('ignores markup that is not a real nested tag', () => {
