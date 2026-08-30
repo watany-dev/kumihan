@@ -64,9 +64,15 @@ describe('preview app', () => {
     assert.equal(res.status, 200)
     assert.equal(res.headers.get('Content-Type'), 'text/html; charset=utf-8')
     assert.equal(res.headers.get('Cache-Control'), 'no-store')
-    assert.equal(res.headers.get('Refresh'), '2')
+    // 2 秒ごとの Refresh はやめ、保存されたときだけ /events で知らせます。
+    assert.equal(res.headers.get('Refresh'), null)
     const html = await res.text()
     assert.match(html, /^<!DOCTYPE html>/)
+    assert.match(
+      html,
+      /<script src="assets\/reload.js" data-kumihan-version="[0-9a-f]{16}" defer><\/script>/,
+    )
+    assert.match(html, /<noscript><meta http-equiv="refresh" content="2"><\/noscript>/)
     assert.match(html, /<article class="typeset">/)
     assert.match(html, /aria-label="表示モード"/)
     assert.match(html, /href="magazine.html"/)
@@ -107,9 +113,12 @@ describe('preview app', () => {
     const app = createPreviewApp({ source: './content/does-not-exist.md' })
     const res = await app.request('/')
     assert.equal(res.status, 404)
-    assert.equal(res.headers.get('Refresh'), '2')
+    assert.equal(res.headers.get('Refresh'), null)
     const html = await res.text()
     assert.match(html, /原稿が見つかりません/)
+    // 原稿が置かれた瞬間に本文へ切り替わるよう、エラーページにも
+    // 自動リロードを入れます（バージョンは「無し」で接続する）。
+    assert.match(html, /<script src="assets\/reload.js" data-kumihan-version="" defer><\/script>/)
     assert.equal(html.toLowerCase().includes('enoent'), false)
   })
 })
@@ -215,6 +224,29 @@ describe('preview reuse', () => {
     }
   })
 
+  it('embeds the same version in every mode and changes it with the manuscript', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'kumihan-app-version-'))
+    const file = join(dir, 'index.md')
+    try {
+      await writeFile(file, '# 版 1\n')
+      const app = createPreviewApp({ source: file })
+      const versionOf = async (path: string) =>
+        /data-kumihan-version="([0-9a-f]{16})"/.exec(await (await app.request(path)).text())?.[1]
+
+      const print = await versionOf('/')
+      assert.ok(print)
+      assert.equal(await versionOf('/magazine.html'), print)
+      assert.equal(await versionOf('/web.html'), print)
+
+      await writeFile(file, '# 版 2\n')
+      const next = await versionOf('/')
+      assert.ok(next)
+      assert.notEqual(next, print)
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
   it('shows the manuscript again after it is restored to an earlier state', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'kumihan-app-undo-'))
     const file = join(dir, 'index.md')
@@ -230,6 +262,125 @@ describe('preview reuse', () => {
       await writeFile(file, '# もとの原稿\n')
       assert.equal(await (await app.request('/')).text(), original)
     } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+})
+
+// SSE の応答から、pattern に合う内容が届くまで読み続けます。届かないまま
+// timeoutMs が過ぎたら null を返します（読みかけの read は後の cancel で解けます）。
+async function readUntil(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  pattern: RegExp,
+  timeoutMs: number,
+): Promise<string | null> {
+  const decoder = new TextDecoder()
+  let buffered = ''
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) return null
+    const race = await Promise.race([
+      reader.read(),
+      new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), remaining)),
+    ])
+    if (race === 'timeout' || race.done) return null
+    buffered += decoder.decode(race.value, { stream: true })
+    if (pattern.test(buffered)) return buffered
+  }
+}
+
+function sseReader(res: Response): ReadableStreamDefaultReader<Uint8Array> {
+  assert.equal(res.status, 200)
+  assert.equal(res.headers.get('Content-Type'), 'text/event-stream')
+  assert.ok(res.body)
+  return res.body.getReader()
+}
+
+describe('preview live reload', () => {
+  it('serves the reload script', async () => {
+    const app = createPreviewApp({ source: './content/index.md' })
+    const res = await app.request('/assets/reload.js')
+    assert.equal(res.status, 200)
+    assert.equal(res.headers.get('Content-Type'), 'text/javascript; charset=utf-8')
+    assert.equal(res.headers.get('Cache-Control'), 'no-store')
+    const js = await res.text()
+    assert.match(js, /EventSource/)
+    assert.match(js, /data-kumihan-version/)
+    assert.match(js, /location\.reload\(\)/)
+  })
+
+  it('notifies /events when the manuscript is saved', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'kumihan-app-sse-'))
+    const file = join(dir, 'index.md')
+    await writeFile(file, '# 保存前\n')
+    const app = createPreviewApp({ source: file })
+    const reader = sseReader(await app.request('/events'))
+    try {
+      assert.ok(await readUntil(reader, /retry: \d+/, 2000), 'retry line')
+      await writeFile(file, '# 保存後\n')
+      const notified = await readUntil(reader, /data: [0-9a-f]{16}/, 2000)
+      assert.ok(notified, '保存が通知されない')
+    } finally {
+      await reader.cancel()
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('tells a page with a stale version to reload immediately', async () => {
+    // ページの読み込みから /events の接続までの間に保存が挟まったときは、
+    // 次の保存を待たずにその場で知らせます。
+    const app = createPreviewApp({ source: './content/index.md' })
+    const reader = sseReader(await app.request('/events?v=0000000000000000'))
+    try {
+      const notified = await readUntil(reader, /data: [0-9a-f]{16}/, 2000)
+      assert.ok(notified, '古い版のページに知らせない')
+    } finally {
+      await reader.cancel()
+    }
+  })
+
+  it('stays quiet while the manuscript is unchanged', async () => {
+    const app = createPreviewApp({ source: './content/index.md' })
+    const html = await (await app.request('/')).text()
+    const version = /data-kumihan-version="([0-9a-f]{16})"/.exec(html)?.[1]
+    assert.ok(version)
+    const reader = sseReader(await app.request(`/events?v=${version}`))
+    try {
+      assert.ok(await readUntil(reader, /retry: \d+/, 2000), 'retry line')
+      assert.equal(await readUntil(reader, /data:/, 150), null)
+    } finally {
+      await reader.cancel()
+    }
+  })
+
+  it('keeps /events open for a piped manuscript without notifying', async () => {
+    // 標準入力の原稿は変わりようがないので、つないだままイベントは流れません。
+    const app = createPreviewApp({ source: memoryManuscript('# パイプ原稿\n') })
+    const reader = sseReader(await app.request('/events'))
+    try {
+      assert.ok(await readUntil(reader, /retry: \d+/, 2000), 'retry line')
+      assert.equal(await readUntil(reader, /data:/, 150), null)
+    } finally {
+      await reader.cancel()
+    }
+  })
+
+  it('falls back to polling when the directory cannot be watched, and notices the manuscript appearing', async () => {
+    // fs.watch は無いディレクトリを見張れません。1 秒ごとの読み直しに落ち、
+    // 原稿が現れた時点で（404 ページの空バージョンとの差で）通知されます。
+    const dir = await mkdtemp(join(tmpdir(), 'kumihan-app-fallback-'))
+    const missing = join(dir, 'not-yet')
+    const app = createPreviewApp({ source: join(missing, 'index.md') })
+    const reader = sseReader(await app.request('/events'))
+    try {
+      assert.ok(await readUntil(reader, /retry: \d+/, 2000), 'retry line')
+      await mkdir(missing)
+      await writeFile(join(missing, 'index.md'), '# 現れた原稿\n')
+      const notified = await readUntil(reader, /data: [0-9a-f]{16}/, 3000)
+      assert.ok(notified, '原稿が現れたことに気づかない')
+    } finally {
+      await reader.cancel()
       await rm(dir, { recursive: true, force: true })
     }
   })

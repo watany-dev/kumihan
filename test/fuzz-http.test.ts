@@ -115,8 +115,12 @@ class RecordingResponse {
   setHeader(name: string, value: unknown): void {
     this.headers[name] = value
   }
-  end(chunk?: unknown): this {
+  write(chunk: unknown): this {
     this.body = chunk
+    return this
+  }
+  end(chunk?: unknown): this {
+    if (chunk !== undefined) this.body = chunk
     return this
   }
 }

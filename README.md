@@ -26,7 +26,7 @@ chmod +x kumihan
 ./kumihan serve manuscript.md
 ```
 
-ブラウザで http://127.0.0.1:3000 を開き、右上から表示モードを切り替えます。保存した原稿は、数秒以内にプレビューへ反映されます。
+ブラウザで http://127.0.0.1:3000 を開き、右上から表示モードを切り替えます。保存した原稿は、0.2 秒ほどでプレビューへ反映されます。
 
 ```bash
 ./kumihan export manuscript.md --out dist
