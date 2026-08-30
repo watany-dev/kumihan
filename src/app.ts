@@ -19,7 +19,11 @@ export interface PreviewConfig {
 const HTML_HEADERS = {
   'Content-Type': 'text/html; charset=utf-8',
   'Cache-Control': 'no-store',
-  // ponytail: full-page Refresh every 2s. EventSource if scroll must stick.
+  // ponytail: full-page Refresh every 2s.
+  //
+  // スクロール位置はリロードを跨いで復元されます（Chromium で実測）。EventSource
+  // が要るのはそこではなく、保存から表示までの遅れ（この間隔ぶん、平均 1 秒）を
+  // 詰めたくなったときです。
   Refresh: '2',
 } as const
 
@@ -62,10 +66,40 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
     }
   })
 
+  // 原稿が変わらないかぎり、組んだ結果を使い回します。
+  //
+  // プレビューは Refresh で同じ原稿を繰り返し取りに来ます。開いているタブと
+  // モードの数だけ、変わっていない原稿を毎回組み直していました（1MB の原稿で
+  // 1 回 68ms）。原稿の中身が前回と同じかどうかだけで判定するので、mtime の
+  // 粒度に頼らず、保存し直しただけのファイルも取り違えません。
+  //
+  // 中間の断片は 3 つのモードで共通です。モードを切り替えても Markdown の
+  // 変換はやり直しません（変換は組み立ての 3 倍以上かかります）。
+  let cachedMarkdown: string | null = null
+  let cachedFragment = ''
+  const cachedDocuments = new Map<PreviewMode, string>()
+
+  function documentFor(markdown: string, mode: PreviewMode): string {
+    if (markdown !== cachedMarkdown) {
+      cachedMarkdown = markdown
+      cachedFragment = renderMarkdown(markdown)
+      cachedDocuments.clear()
+    }
+
+    const cached = cachedDocuments.get(mode)
+    if (cached !== undefined) {
+      return cached
+    }
+
+    const html = renderDocument(cachedFragment, { title, language, mode })
+    cachedDocuments.set(mode, html)
+    return html
+  }
+
   async function serveManuscript(c: Context, mode: PreviewMode) {
     try {
       const markdown = await manuscript.read()
-      const html = renderDocument(renderMarkdown(markdown), { title, language, mode })
+      const html = documentFor(markdown, mode)
       return c.body(html, 200, HTML_HEADERS)
     } catch (error) {
       if (isNotFound(error)) {

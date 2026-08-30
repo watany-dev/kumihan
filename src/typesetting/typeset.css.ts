@@ -33,6 +33,21 @@ body {
   background: #ffffff;
   color: #1a1a1a;
   box-shadow: 0 1.2mm 6mm rgba(40, 30, 20, 0.22);
+
+  /*
+   * 画面の外に出ている頁は組まない。
+   *
+   * プレビューは Refresh で頁を丸ごと作り直します。ブラウザは毎回すべての頁を
+   * 組み直すので、原稿が伸びるとリロード 1 回が秒単位になります（331KB の原稿で
+   * parse+layout に 2.3 秒。2 秒間隔のリロードが追い越されていました）。
+   *
+   * 頁は A4 と分かっているので、見えていない頁は実寸を伝えて中身の組版だけ
+   * 飛ばせます。スクロールバーの長さは変わらず、見えた時点で組まれます。
+   * contain-intrinsic-size の auto は、一度組んだ頁の実寸を覚えるという意味で、
+   * 行数の見積りがずれて 297mm を超えた頁もそのまま扱えます。
+   */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 210mm auto 297mm;
 }
 
 .typeset {
@@ -264,6 +279,9 @@ body {
     width: 210mm;
     min-height: 297mm;
     break-after: page;
+
+    /* 紙に出すときは全頁を組む（画面外を飛ばす最適化を打ち消す）。 */
+    content-visibility: visible;
   }
 
   .paper:last-of-type {
