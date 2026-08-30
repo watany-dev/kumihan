@@ -82,6 +82,33 @@ describe('renderDocument', () => {
     assert.equal(html.includes('cols-2'), false)
   })
 
+  it('embeds the live-reload script only when a version is handed in', () => {
+    const preview = renderDocument('<p>ok</p>', { liveReload: 'abcdef0123456789' })
+    assert.match(
+      preview,
+      /<script src="assets\/reload.js" data-kumihan-version="abcdef0123456789" defer><\/script>/,
+    )
+    // スクリプトが動かないブラウザは、以前と同じ 2 秒間隔の再読み込み。
+    assert.match(preview, /<noscript><meta http-equiv="refresh" content="2"><\/noscript>/)
+    // プレビューの CSP は自分のスクリプトと EventSource だけ通す。
+    assert.match(preview, /script-src 'self'/)
+    assert.match(preview, /connect-src 'self'/)
+    assert.match(preview, /script-src-attr 'none'/)
+
+    // export した静的 HTML にはスクリプトを入れず、CSP も締めたまま。
+    const exported = renderDocument('<p>ok</p>')
+    assert.equal(/<script\b/i.test(exported), false)
+    assert.equal(exported.includes('noscript'), false)
+    assert.match(exported, /script-src 'none'/)
+    assert.match(exported, /connect-src 'none'/)
+  })
+
+  it('escapes the live-reload version', () => {
+    const html = renderDocument('<p>ok</p>', { liveReload: '"><script>x</script>' })
+    assert.equal(html.includes('<script>x'), false)
+    assert.match(html, /data-kumihan-version="&quot;&gt;&lt;script&gt;x&lt;\/script&gt;"/)
+  })
+
   it('escapes document title', () => {
     const html = renderDocument('<p>ok</p>', { title: '<script>x</script>' })
     assert.equal(html.includes('<title><script>'), false)

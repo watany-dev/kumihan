@@ -8,6 +8,12 @@ export interface RenderDocumentOptions {
   title?: string
   language?: string
   mode?: PreviewMode
+  /**
+   * プレビューの自動リロードを埋める。値は原稿のバージョン（内容のハッシュ）で、
+   * ブラウザはこれを添えて `/events` につなぐ。export では渡さないので、
+   * 静的 HTML にはスクリプトが入らず、CSP も `script-src 'none'` のまま。
+   */
+  liveReload?: string
 }
 
 export function renderDocument(html: string, options?: RenderDocumentOptions): string {
@@ -18,17 +24,25 @@ export function renderDocument(html: string, options?: RenderDocumentOptions): s
   const stylesheet = mode === 'web' ? 'assets/web.css' : 'assets/typeset.css'
   const viewport =
     mode === 'web' ? '  <meta name="viewport" content="width=device-width, initial-scale=1">\n' : ''
+  const liveReload = options?.liveReload
 
   return `<!DOCTYPE html>
 <html lang="${language}">
 <head>
   <meta charset="utf-8">
-${viewport}${documentSecurityMeta()}
+${viewport}${documentSecurityMeta(liveReload === undefined ? 'export' : 'preview')}
   <title>${title}</title>
   <link rel="stylesheet" href="${stylesheet}">
-</head>
+${liveReload === undefined ? '' : liveReloadHead(liveReload)}</head>
 ${renderBody(html, mode)}
 </html>
+`
+}
+
+// スクリプトが動かないブラウザでは、以前と同じ 2 秒間隔の再読み込みに戻す。
+function liveReloadHead(version: string): string {
+  return `  <script src="assets/reload.js" data-kumihan-version="${escapeHtml(version)}" defer></script>
+  <noscript><meta http-equiv="refresh" content="2"></noscript>
 `
 }
 

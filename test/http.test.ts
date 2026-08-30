@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 import { describe, it } from 'vite-plus/test'
 
@@ -11,14 +14,17 @@ import {
   safeHost,
   safeRequestTarget,
 } from '../src/node-server.js'
-import { DOCUMENT_CONTENT_SECURITY_POLICY } from '../src/security/headers.js'
 
 function assertSecurityHeaders(headers: Headers): void {
   assert.equal(headers.get('X-Content-Type-Options'), 'nosniff')
   assert.equal(headers.get('X-Frame-Options'), 'DENY')
   assert.equal(headers.get('Referrer-Policy'), 'no-referrer')
+  // プレビューは自動リロードのスクリプト 1 本と EventSource だけ 'self' で
+  // 通します。インライン・属性のスクリプトは通しません。
   assert.match(headers.get('Content-Security-Policy') ?? '', /default-src 'none'/)
-  assert.match(headers.get('Content-Security-Policy') ?? '', /script-src 'none'/)
+  assert.match(headers.get('Content-Security-Policy') ?? '', /script-src 'self'/)
+  assert.match(headers.get('Content-Security-Policy') ?? '', /script-src-attr 'none'/)
+  assert.match(headers.get('Content-Security-Policy') ?? '', /connect-src 'self'/)
   assert.match(headers.get('Content-Security-Policy') ?? '', /style-src 'self'/)
   assert.match(headers.get('Content-Security-Policy') ?? '', /img-src 'self' https: http:/)
   assert.equal(headers.get('Cross-Origin-Resource-Policy'), 'same-origin')
@@ -71,8 +77,13 @@ class RecordingResponse {
   setHeader(name: string, value: unknown): void {
     this.headers[name] = value
   }
+  write(chunk: Uint8Array | string): this {
+    const text = typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk)
+    this.body = typeof this.body === 'string' ? this.body + text : text
+    return this
+  }
   end(chunk?: unknown): this {
-    this.body = chunk
+    if (typeof chunk === 'string' || chunk instanceof Uint8Array) this.write(chunk)
     return this
   }
 }
@@ -107,7 +118,10 @@ describe('preview security headers', () => {
     assert.equal(res.status, 404)
     assertSecurityHeaders(res.headers)
     const html = await res.text()
-    assert.match(html, new RegExp(DOCUMENT_CONTENT_SECURITY_POLICY.replaceAll(';', '\\;')))
+    assert.match(html, /http-equiv="Content-Security-Policy"/)
+    assert.match(html, /script-src 'self'/)
+    assert.match(html, /connect-src 'self'/)
+    assert.equal(html.includes('frame-ancestors'), false)
   })
 })
 
@@ -150,6 +164,56 @@ describe('node http adapter', () => {
           else resolve()
         })
       })
+    }
+  })
+
+  it('streams /events over Node HTTP and cleans up when the page goes away', async () => {
+    // SSE は終わらない応答です。貯めてから書く方式では届かないこと、
+    // タブが閉じたら接続ごとの監視が片づき、サーバーを閉じられることを
+    // 実際の HTTP で確かめます。
+    const dir = await mkdtemp(join(tmpdir(), 'kumihan-http-sse-'))
+    const file = join(dir, 'index.md')
+    await writeFile(file, '# 保存前\n')
+    const server = createNodeServer(createPreviewApp({ source: file }))
+    await new Promise<void>((resolve) => {
+      server.listen(0, '127.0.0.1', resolve)
+    })
+    const address = server.address()
+    assert.ok(address && typeof address === 'object')
+    const disconnect = new AbortController()
+    try {
+      const res = await fetch(`http://127.0.0.1:${address.port}/events`, {
+        signal: disconnect.signal,
+      })
+      assert.equal(res.status, 200)
+      assert.equal(res.headers.get('Content-Type'), 'text/event-stream')
+      assert.ok(res.body)
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let received = ''
+      const deadline = Date.now() + 5000
+      await writeFile(file, '# 保存後\n')
+      while (!received.includes('data:') && Date.now() < deadline) {
+        const race = await Promise.race([
+          reader.read(),
+          new Promise<'timeout'>((resolve) => setTimeout(() => resolve('timeout'), 5000)),
+        ])
+        if (race === 'timeout' || race.done) break
+        received += decoder.decode(race.value, { stream: true })
+      }
+      assert.match(received, /retry: \d+/)
+      assert.match(received, /data: [0-9a-f]{16}/)
+    } finally {
+      // タブを閉じたのと同じ切れ方。接続と原稿の監視が残っていると
+      // close が返らず、このテストはタイムアウトで落ちます。
+      disconnect.abort()
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+          if (error) reject(error)
+          else resolve()
+        })
+      })
+      await rm(dir, { recursive: true, force: true })
     }
   })
 
