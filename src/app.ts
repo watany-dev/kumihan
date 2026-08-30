@@ -1,7 +1,9 @@
 import { readFile } from 'node:fs/promises'
+import { dirname, resolve } from 'node:path'
 
 import { Hono, type Context } from 'hono'
 
+import { imageContentType, resolveManuscriptFile } from './manuscript-path.js'
 import { renderMarkdown } from './markdown/render.js'
 import { documentSecurityMeta, previewSecureHeaders } from './security/headers.js'
 import { renderDocument, type PreviewMode } from './typesetting/render-page.js'
@@ -29,6 +31,7 @@ const CSS_HEADERS = {
 export function createPreviewApp(config: PreviewConfig = { source: './content/index.md' }): Hono {
   const title = config.title ?? 'Typeset Preview'
   const language = config.language ?? 'ja'
+  const root = dirname(resolve(config.source))
   const app = new Hono()
   app.use('*', previewSecureHeaders())
 
@@ -42,6 +45,22 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
   app.get('/magazine', (c) => serveManuscript(c, 'magazine'))
   app.get('/web.html', (c) => serveManuscript(c, 'web'))
   app.get('/web', (c) => serveManuscript(c, 'web'))
+
+  app.get('/*', async (c) => {
+    const rel = c.req.path.slice(1)
+    const file = await resolveManuscriptFile(root, rel)
+    if (file === null) return c.body('', 404)
+    const type = imageContentType(rel) ?? imageContentType(file)
+    if (type === undefined) return c.body('', 404)
+    try {
+      return c.body(await readFile(file), 200, {
+        'Content-Type': type,
+        'Cache-Control': 'no-store',
+      })
+    } catch {
+      return c.body('', 404)
+    }
+  })
 
   async function serveManuscript(c: Context, mode: PreviewMode) {
     try {

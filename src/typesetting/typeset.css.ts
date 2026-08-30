@@ -101,6 +101,11 @@ body {
   text-underline-offset: 0.18em;
 }
 
+.typeset img {
+  max-width: 100%;
+  height: auto;
+}
+
 .typeset blockquote {
   margin: 1.2em 0 1.2em 0.4em;
   padding: 0.15em 0 0.15em 1em;
@@ -196,7 +201,8 @@ body {
 .typeset.cols-2 h1,
 .typeset.cols-2 h1 + p,
 .typeset.cols-2 pre,
-.typeset.cols-2 hr {
+.typeset.cols-2 hr,
+.typeset.cols-2 p:has(> img:only-child) {
   column-span: all;
 }
 

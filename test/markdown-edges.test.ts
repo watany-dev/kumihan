@@ -40,6 +40,8 @@ describe('markdown edge cases', () => {
   it('leaves incomplete links as text', () => {
     assert.equal(renderMarkdown('[text](https://example.com'), '<p>[text](https://example.com</p>')
     assert.equal(renderMarkdown('[text]no-url'), '<p>[text]no-url</p>')
+    assert.equal(renderMarkdown('![alt](a.png'), '<p>![alt](a.png</p>')
+    assert.equal(renderMarkdown('![alt](x "t")'), '<p>![alt](x &quot;t&quot;)</p>')
   })
 
   it('does not put a space before an empty continuation after a hard break', () => {

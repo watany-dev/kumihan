@@ -20,6 +20,7 @@ function assertSecurityHeaders(headers: Headers): void {
   assert.match(headers.get('Content-Security-Policy') ?? '', /default-src 'none'/)
   assert.match(headers.get('Content-Security-Policy') ?? '', /script-src 'none'/)
   assert.match(headers.get('Content-Security-Policy') ?? '', /style-src 'self'/)
+  assert.match(headers.get('Content-Security-Policy') ?? '', /img-src 'self' https: http:/)
   assert.equal(headers.get('Cross-Origin-Resource-Policy'), 'same-origin')
   assert.match(headers.get('Permissions-Policy') ?? '', /camera=\(\)/)
 }
@@ -88,6 +89,7 @@ describe('preview security headers', () => {
       '/health',
       '/assets/typeset.css',
       '/assets/web.css',
+      '/missing.png',
     ]
     const responses = []
     for (const path of paths) {
@@ -96,7 +98,7 @@ describe('preview security headers', () => {
     for (const res of responses) {
       assertSecurityHeaders(res.headers)
     }
-    assert.equal(responses.length, 8)
+    assert.equal(responses.length, 9)
   })
 
   it('sets security headers on error pages', async () => {

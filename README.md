@@ -72,15 +72,16 @@ http://127.0.0.1:3000 を開きます。同じ LAN の別端末から見たい�
 - 段落
 - `**bold**` / `*emphasis*` / `` `inline code` ``
 - `[link](https://example.com)`
+- `![alt](path)` 画像（相対パス / `https:` / `http:`）
 - `>` 引用
 - `-` 箇条書き / `1.` 番号付きリスト
 - `---` 水平線
 - フェンス付きコードブロック
 - パイプ区切りの表（揃えの `:` とセル内の `\|` を含む）
 
-使えないもの: raw HTML、入れ子リスト、footnote、task list、image、MDX、frontmatter、syntax highlighting。
+使えないもの: raw HTML、入れ子リスト、footnote、task list、MDX、frontmatter、syntax highlighting。
 
-HTML は escape します。リンクは `https:` / `http:` / `mailto:` / 相対 URL / `#fragment` だけ通し、`javascript:` などは無効にします。
+HTML は escape します。リンクは `https:` / `http:` / `mailto:` / 相対 URL / `#fragment` だけ通し、`javascript:` などは無効にします。画像の URL は相対と `https:` / `http:` だけです。
 
 日本語の改行では不要な半角空白を入れません。行末 2 スペースは明示的な改行です。
 
@@ -107,6 +108,7 @@ dist/
 ├─ index.html
 ├─ magazine.html
 ├─ web.html
+├─ shot.png          # 原稿が `![alt](shot.png)` を含むとき
 └─ assets/
    ├─ typeset.css
    └─ web.css

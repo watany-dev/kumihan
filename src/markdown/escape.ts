@@ -134,3 +134,13 @@ export function sanitizeUrl(url: string): string {
 
   return '#'
 }
+
+export function sanitizeImageUrl(url: string): string {
+  const sanitized = sanitizeUrl(url)
+  if (sanitized.startsWith('#')) return '#'
+  const compact = sanitized.replace(/\s+/g, '')
+  const end = schemeEnd(compact)
+  return end === -1 || schemeIs(compact, end, 'https') || schemeIs(compact, end, 'http')
+    ? sanitized
+    : '#'
+}

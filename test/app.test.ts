@@ -1,10 +1,18 @@
 import assert from 'node:assert/strict'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 import { describe, it } from 'vite-plus/test'
 
 import { createPreviewApp } from '../src/app.js'
 import { typesetCss } from '../src/typesetting/typeset.css.js'
 import { webCss } from '../src/typesetting/web.css.js'
+
+const PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64',
+)
 
 describe('preview app', () => {
   it('returns ok from /health', async () => {
@@ -27,6 +35,8 @@ describe('preview app', () => {
     assert.match(css, /column-count:\s*2/)
     assert.match(css, /height:\s*calc\(40 \* 1\.75em\)/)
     assert.match(css, /break-after:\s*page/)
+    assert.match(css, /max-width:\s*100%/)
+    assert.match(css, /p:has\(> img:only-child\)/)
   })
 
   it('serves web article css', async () => {
@@ -36,6 +46,8 @@ describe('preview app', () => {
     assert.equal(res.headers.get('Content-Type'), 'text/css; charset=utf-8')
     assert.equal(res.headers.get('Cache-Control'), 'no-store')
     assert.equal(await res.text(), webCss)
+    assert.match(webCss, /\.article img/)
+    assert.match(webCss, /max-width:\s*100%/)
   })
 
   it('renders markdown from disk', async () => {
@@ -91,5 +103,51 @@ describe('preview app', () => {
     const html = await res.text()
     assert.match(html, /原稿が見つかりません/)
     assert.equal(html.toLowerCase().includes('enoent'), false)
+  })
+})
+
+describe('preview images', () => {
+  it('serves an image next to the manuscript and rejects paths outside the root', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'kumihan-preview-img-'))
+    const root = join(dir, 'ms')
+    try {
+      await writeFile(join(dir, 'secret.png'), PNG)
+      await mkdir(root)
+      await writeFile(join(root, 'index.md'), '![図](a.png)\n')
+      await writeFile(join(root, 'a.png'), PNG)
+      const app = createPreviewApp({ source: join(root, 'index.md') })
+      const ok = await app.request('/a.png')
+      assert.equal(ok.status, 200)
+      assert.equal(ok.headers.get('Content-Type'), 'image/png')
+      assert.equal(ok.headers.get('Cache-Control'), 'no-store')
+      assert.equal(ok.headers.get('Refresh'), null)
+      assert.equal(ok.headers.get('X-Content-Type-Options'), 'nosniff')
+      assert.match(ok.headers.get('Content-Security-Policy') ?? '', /img-src 'self' https: http:/)
+      assert.deepEqual(Buffer.from(await ok.arrayBuffer()), PNG)
+
+      const html = await app.request('/')
+      assert.match(await html.text(), /<img src="a.png" alt="図">/)
+
+      const outside = await app.request('/%2e%2e/secret.png')
+      assert.equal(outside.status, 404)
+      assert.equal(outside.headers.get('Refresh'), null)
+
+      const missing = await app.request('/missing.png')
+      assert.equal(missing.status, 404)
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('returns 404 when the image path is a directory', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'kumihan-preview-dir-'))
+    try {
+      await mkdir(join(dir, 'a.png'))
+      await writeFile(join(dir, 'index.md'), '![x](a.png)\n')
+      const app = createPreviewApp({ source: join(dir, 'index.md') })
+      assert.equal((await app.request('/a.png')).status, 404)
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
   })
 })

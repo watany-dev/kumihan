@@ -31,16 +31,17 @@ GitHub Codespaces と Dev Container は Bun と Vite+ を入れ、`vp install --
 
 ## HTTP
 
-| 経路                      | 内容                                           |
-| ------------------------- | ---------------------------------------------- |
-| `GET /`                   | 原稿を読み、A4 1段組（約 24 行で頁分け）で返す |
-| `GET /magazine.html`      | 同じ原稿を A4 2段組（約 40 行で頁分け）で返す  |
-| `GET /magazine`           | `/magazine.html` と同じ                        |
-| `GET /web.html`           | 同じ原稿を Web 記事スタイルで返す              |
-| `GET /web`                | `/web.html` と同じ                             |
-| `GET /health`             | `{ "ok": true }`                               |
-| `GET /assets/typeset.css` | 組版 CSS（1段 / 2段）                          |
-| `GET /assets/web.css`     | Web 記事 CSS                                   |
+| 経路                         | 内容                                                                 |
+| ---------------------------- | -------------------------------------------------------------------- |
+| `GET /`                      | 原稿を読み、A4 1段組（約 24 行で頁分け）で返す                       |
+| `GET /magazine.html`         | 同じ原稿を A4 2段組（約 40 行で頁分け）で返す                        |
+| `GET /magazine`              | `/magazine.html` と同じ                                              |
+| `GET /web.html`              | 同じ原稿を Web 記事スタイルで返す                                    |
+| `GET /web`                   | `/web.html` と同じ                                                   |
+| `GET /health`                | `{ "ok": true }`                                                     |
+| `GET /assets/typeset.css`    | 組版 CSS（1段 / 2段）                                                |
+| `GET /assets/web.css`        | Web 記事 CSS                                                         |
+| `GET` 原稿ディレクトリの画像 | 相対パスの png / jpg / gif / webp / svg / avif。`Refresh` は付けない |
 
 `GET /` は毎回ファイルを読み直し、`Cache-Control: no-store` で返します。HTML 応答には `Refresh: 2` を付けます（export した静的 HTML には付けません）。応答には CSP（`script-src 'none'`）ほかセキュリティヘッダを付け、静的 HTML にも同じ CSP を `<meta>` で埋めます。原稿が無いときは 404、読み込み失敗時は 500 で、stack trace はブラウザへ出しません。`CONNECT` / `TRACE` / `TRACK` は 405 です。
 

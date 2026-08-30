@@ -80,7 +80,13 @@ function elementEnd(html: string, start: number): number {
     return html.length
   }
   const name = tagName(html, start + 1)
-  if (name.length === 0 || name === 'hr' || name === 'br' || html.charCodeAt(gt - 1) === 0x2f) {
+  if (
+    name.length === 0 ||
+    name === 'hr' ||
+    name === 'br' ||
+    name === 'img' ||
+    html.charCodeAt(gt - 1) === 0x2f
+  ) {
     return gt + 1
   }
 

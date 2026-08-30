@@ -88,6 +88,12 @@ describe('renderMarkdown', () => {
     )
   })
 
+  it('renders an image', () => {
+    assert.equal(renderMarkdown('![図](a.png)'), '<p><img src="a.png" alt="図"></p>')
+    assert.equal(renderMarkdown('![](a.png)'), '<p><img src="a.png" alt=""></p>')
+    assert.equal(renderMarkdown('Hello!'), '<p>Hello!</p>')
+  })
+
   it('renders a horizontal rule', () => {
     assert.equal(renderMarkdown('---'), '<hr>')
   })

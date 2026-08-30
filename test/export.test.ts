@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 
 import { describe, it } from 'vite-plus/test'
 
 import { exportSite } from '../src/export/export-site.js'
 import { writeExport } from '../src/export/write-files.js'
+import { contained } from '../src/manuscript-path.js'
 import { renderMarkdown } from '../src/markdown/render.js'
 import { renderDocument } from '../src/typesetting/render-page.js'
 import { typesetCss } from '../src/typesetting/typeset.css.js'
@@ -113,6 +114,84 @@ describe('writeExport', () => {
       assert.ok(written.some((path) => path.endsWith('index.html')))
       assert.match(await readFile(written[0] ?? '', 'utf8'), /Hello/)
     } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('copies local images and leaves http(s) src in place', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'kumihan-export-img-'))
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64',
+    )
+    const logged: string[] = []
+    const original = console.error
+    console.error = (...args: unknown[]) => {
+      logged.push(args.map(String).join(' '))
+    }
+    try {
+      const source = join(dir, 'index.md')
+      await writeFile(
+        source,
+        '![図](a.png)\n\n![dot](./a.png)\n\n![n](images/n.png)\n\n![x](https://example.com/b.png)\n\n![y](missing.png)\n',
+      )
+      await writeFile(join(dir, 'a.png'), png)
+      await mkdir(join(dir, 'images'))
+      await writeFile(join(dir, 'images', 'n.png'), png)
+      const out = join(dir, 'out')
+      const written = await writeExport(source, out)
+      assert.ok(written.some((path) => path.endsWith('a.png')))
+      assert.ok(written.some((path) => path.endsWith(join('images', 'n.png'))))
+      assert.deepEqual(await readFile(join(out, 'a.png')), png)
+      assert.deepEqual(await readFile(join(out, 'images', 'n.png')), png)
+      const html = await readFile(join(out, 'index.html'), 'utf8')
+      const magazine = await readFile(join(out, 'magazine.html'), 'utf8')
+      const web = await readFile(join(out, 'web.html'), 'utf8')
+      assert.match(html, /src="a.png"/)
+      assert.match(html, /src="\.\/a.png"/)
+      assert.match(html, /src="images\/n.png"/)
+      assert.match(magazine, /src="a.png"/)
+      assert.match(web, /src="a.png"/)
+      assert.match(html, /src="https:\/\/example.com\/b.png"/)
+      assert.equal(html.includes('src="missing.png"'), true)
+      assert.equal(
+        written.some((path) => path.endsWith('b.png')),
+        false,
+      )
+      assert.ok(logged.some((line) => line.includes('missing.png')))
+    } finally {
+      console.error = original
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('does not copy an in-root image outside the output directory', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'kumihan-export-escape-'))
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64',
+    )
+    const logged: string[] = []
+    const original = console.error
+    console.error = (...args: unknown[]) => {
+      logged.push(args.map(String).join(' '))
+    }
+    try {
+      const ms = join(dir, 'ms')
+      await mkdir(ms)
+      await writeFile(join(ms, 'a.png'), png)
+      await writeFile(join(ms, 'index.md'), '![x](../ms/a.png)\n\n![y](%2e%2e/ms/a.png)\n')
+      const out = join(dir, 'out')
+      const written = await writeExport(join(ms, 'index.md'), out)
+      const destRoot = resolve(out)
+      for (const path of written) {
+        assert.equal(contained(destRoot, resolve(path)), true, path)
+      }
+      assert.deepEqual(await readFile(join(ms, 'a.png')), png)
+      assert.ok(logged.some((line) => line.includes('../ms/a.png')))
+      assert.ok(logged.some((line) => line.includes('%2e%2e/ms/a.png')))
+    } finally {
+      console.error = original
       await rm(dir, { recursive: true, force: true })
     }
   })

@@ -1,9 +1,10 @@
-import { escapeHtml, sanitizeUrl } from './escape.js'
+import { escapeHtml, sanitizeImageUrl, sanitizeUrl } from './escape.js'
 import { HARD_BREAK } from './hard-break.js'
 
 const BACKTICK = 0x60
 const BRACKET_OPEN = 0x5b
 const ASTERISK = 0x2a
+const BANG = 0x21
 
 /**
  * インライン記法を開始しうる文字の次の位置を返します。それ以外の文字は
@@ -12,7 +13,7 @@ const ASTERISK = 0x2a
 function nextMarkerIndex(source: string, from: number): number {
   for (let i = from; i < source.length; i += 1) {
     const code = source.charCodeAt(i)
-    if (code === BACKTICK || code === BRACKET_OPEN || code === ASTERISK) {
+    if (code === BACKTICK || code === BRACKET_OPEN || code === ASTERISK || code === BANG) {
       return i
     }
   }
@@ -68,7 +69,7 @@ export function renderInline(source: string): string {
       if (i === source.length) break
     }
 
-    // ここに来る文字は必ず `\``・`[`・`*` のいずれかなので、
+    // ここに来る文字は必ず `\``・`[`・`*`・`!` のいずれかなので、
     // 対応する記法だけを試します。
     const parsed = parseMarker(source, i, exhausted)
     if (parsed) {
@@ -102,6 +103,16 @@ function parseMarker(
     const code = parseDelimited(source, start, '`', exhausted, 'backtick')
     // コードスパンの中身は文字どおり。改行だった場所は空白に戻します。
     return code ? { html: `<code>${escapeHtml(literal(code.text))}</code>`, end: code.end } : null
+  }
+
+  if (marker === BANG && source.charCodeAt(start + 1) === BRACKET_OPEN) {
+    const image = parseLink(source, start + 1, exhausted)
+    return image
+      ? {
+          html: `<img src="${escapeHtml(sanitizeImageUrl(literal(image.url)))}" alt="${escapeHtml(literal(image.text))}">`,
+          end: image.end,
+        }
+      : null
   }
 
   if (marker === BRACKET_OPEN) {
