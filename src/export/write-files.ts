@@ -2,12 +2,12 @@ import { copyFile, mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 
 import { contained, resolveManuscriptFile } from '../manuscript-path.js'
-import { toManuscript, type Manuscript } from '../manuscript.js'
+import { toManuscript, type ManuscriptSource } from '../manuscript.js'
 import { unescapeHtml } from '../markdown/escape.js'
 import { renderMarkdown } from '../markdown/render.js'
 import { exportSite } from './export-site.js'
 
-export async function writeExport(source: string | Manuscript, outDir: string): Promise<string[]> {
+export async function writeExport(source: ManuscriptSource, outDir: string): Promise<string[]> {
   const manuscript = toManuscript(source)
   const markdown = await manuscript.read()
 
@@ -22,7 +22,6 @@ export async function writeExport(source: string | Manuscript, outDir: string): 
       return dest
     }),
   )
-  const root = manuscript.root
   const destRoot = resolve(outDir)
   const copied: string[] = []
   for (const match of renderMarkdown(markdown).matchAll(/<img src="([^"]*)"/g)) {
@@ -32,7 +31,7 @@ export async function writeExport(source: string | Manuscript, outDir: string): 
     // 出るのに書き出しにだけ画像が無い、という食い違いになります。
     const src = unescapeHtml(match[1] ?? '')
     if (src.length === 0 || src.startsWith('#') || /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(src)) continue
-    const from = await resolveManuscriptFile(root, src)
+    const from = await resolveManuscriptFile(manuscript.root, src)
     if (from === null) {
       console.error(`[kumihan] 画像が見つかりません: ${src}`)
       continue

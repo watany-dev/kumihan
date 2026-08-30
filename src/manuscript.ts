@@ -17,14 +17,16 @@ export interface Manuscript {
  * 無いので、画像の相対パスはカレントディレクトリから探します。
  */
 export function memoryManuscript(markdown: string, root: string = process.cwd()): Manuscript {
-  const resolved = resolve(root)
   return {
-    root: resolved,
+    root: resolve(root),
     read: () => Promise.resolve(markdown),
   }
 }
 
-export function toManuscript(source: string | Manuscript): Manuscript {
+/** 原稿ファイルのパス、または取り出し方を差し替えた原稿（標準入力など）。 */
+export type ManuscriptSource = string | Manuscript
+
+export function toManuscript(source: ManuscriptSource): Manuscript {
   if (typeof source !== 'string') return source
   return {
     root: dirname(resolve(source)),

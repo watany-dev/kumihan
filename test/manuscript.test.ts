@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { join } from 'node:path'
 
 import { describe, it } from 'vite-plus/test'
 
@@ -14,7 +14,7 @@ describe('toManuscript', () => {
       const source = join(dir, 'index.md')
       await writeFile(source, '# 最初\n')
       const manuscript = toManuscript(source)
-      assert.equal(manuscript.root, dirname(resolve(source)))
+      assert.equal(manuscript.root, dir)
       assert.equal(await manuscript.read(), '# 最初\n')
       await writeFile(source, '# 次\n')
       assert.equal(await manuscript.read(), '# 次\n')
@@ -39,7 +39,7 @@ describe('toManuscript', () => {
 describe('memoryManuscript', () => {
   it('returns the same text and defaults its root to the working directory', async () => {
     const manuscript = memoryManuscript('# パイプ\n')
-    assert.equal(manuscript.root, resolve(process.cwd()))
+    assert.equal(manuscript.root, process.cwd())
     assert.equal(await manuscript.read(), '# パイプ\n')
   })
 })

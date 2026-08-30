@@ -3,7 +3,7 @@ import { parseArgs } from 'node:util'
 
 import { createPreviewApp } from './app.js'
 import { writeExport } from './export/write-files.js'
-import { memoryManuscript, type Manuscript } from './manuscript.js'
+import { memoryManuscript, type ManuscriptSource } from './manuscript.js'
 import { createNodeServer, describeListenError } from './node-server.js'
 import { createHostPolicy } from './security/host.js'
 
@@ -55,16 +55,15 @@ const source = arg ?? 'content/index.md'
 
 // `-` なら必ず標準入力。省略時も、端末以外（パイプやリダイレクト）が
 // つながっていれば読みます。
-const explicitStdin = arg === '-'
-let manuscript: string | Manuscript = source
+let manuscript: ManuscriptSource = source
 if (
   (command === 'export' || command === 'serve') &&
-  (explicitStdin || (arg === undefined && !process.stdin.isTTY))
+  (arg === '-' || (arg === undefined && !process.stdin.isTTY))
 ) {
   const piped = Buffer.concat(await process.stdin.toArray()).toString('utf8')
   if (piped.trim().length > 0) {
     manuscript = memoryManuscript(piped)
-  } else if (explicitStdin) {
+  } else if (arg === '-') {
     console.error('標準入力が空です')
     process.exit(1)
   }
