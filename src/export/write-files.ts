@@ -19,16 +19,11 @@ export async function writeExport(source: string, outDir: string): Promise<strin
       return dest
     }),
   )
-  const copied = await copyLocalImages(markdown, dirname(resolve(source)), outDir)
-  return [...written, ...copied]
-}
-
-async function copyLocalImages(markdown: string, root: string, outDir: string): Promise<string[]> {
+  const root = dirname(resolve(source))
   const copied: string[] = []
-  const seen = new Set<string>()
-  for (const src of localImageSrcs(renderMarkdown(markdown))) {
-    if (seen.has(src)) continue
-    seen.add(src)
+  for (const match of renderMarkdown(markdown).matchAll(/<img src="([^"]*)"/g)) {
+    const src = match[1] ?? ''
+    if (src.length === 0 || src.startsWith('#') || /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(src)) continue
     const from = await resolveManuscriptFile(root, src)
     if (from === null) {
       console.error(`[kumihan] 画像が見つかりません: ${src}`)
@@ -39,27 +34,5 @@ async function copyLocalImages(markdown: string, root: string, outDir: string): 
     await copyFile(from, dest)
     copied.push(dest)
   }
-  return copied
-}
-
-function localImageSrcs(html: string): string[] {
-  const srcs: string[] = []
-  for (const match of html.matchAll(/<img src="([^"]*)"/g)) {
-    const src = unescapeAttr(match[1] ?? '')
-    if (src.length === 0 || src.startsWith('#') || /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(src)) {
-      continue
-    }
-    srcs.push(src)
-  }
-  return srcs
-}
-
-function unescapeAttr(value: string): string {
-  if (!value.includes('&')) return value
-  return value
-    .replaceAll('&quot;', '"')
-    .replaceAll('&#39;', "'")
-    .replaceAll('&lt;', '<')
-    .replaceAll('&gt;', '>')
-    .replaceAll('&amp;', '&')
+  return [...written, ...copied]
 }

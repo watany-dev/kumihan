@@ -135,21 +135,12 @@ export function sanitizeUrl(url: string): string {
   return '#'
 }
 
-/**
- * 画像の src。sanitizeUrl のあと、http / https / スキーム無しだけ残す。
- * mailto と `#fragment` はリンクには使えるが src にはしない。
- */
 export function sanitizeImageUrl(url: string): string {
   const sanitized = sanitizeUrl(url)
-  if (sanitized.startsWith('#')) {
-    return '#'
-  }
-
+  if (sanitized.startsWith('#')) return '#'
   const compact = sanitized.replace(/\s+/g, '')
   const end = schemeEnd(compact)
-  if (end === -1 || schemeIs(compact, end, 'https') || schemeIs(compact, end, 'http')) {
-    return sanitized
-  }
-
-  return '#'
+  return end === -1 || schemeIs(compact, end, 'https') || schemeIs(compact, end, 'http')
+    ? sanitized
+    : '#'
 }

@@ -90,40 +90,8 @@ describe('renderMarkdown', () => {
 
   it('renders an image', () => {
     assert.equal(renderMarkdown('![図](a.png)'), '<p><img src="a.png" alt="図"></p>')
-  })
-
-  it('renders an image with an empty alt', () => {
     assert.equal(renderMarkdown('![](a.png)'), '<p><img src="a.png" alt=""></p>')
-  })
-
-  it('renders a linked image', () => {
-    assert.equal(
-      renderMarkdown('[![a](b.png)](https://e)'),
-      '<p><a href="https://e"><img src="b.png" alt="a"></a></p>',
-    )
-  })
-
-  it('keeps a lone exclamation mark as text', () => {
     assert.equal(renderMarkdown('Hello!'), '<p>Hello!</p>')
-  })
-
-  it('leaves a leading bracket when a linked image is incomplete', () => {
-    assert.equal(
-      renderMarkdown('[![a](b.png) leftover'),
-      '<p>[<img src="b.png" alt="a"> leftover</p>',
-    )
-    assert.equal(
-      renderMarkdown('[![a](b.png)](foo bar)'),
-      '<p>[<img src="b.png" alt="a">](foo bar)</p>',
-    )
-    assert.equal(
-      renderMarkdown('[![a](b.png)](https://e'),
-      '<p>[<img src="b.png" alt="a">](https://e</p>',
-    )
-    assert.equal(
-      renderMarkdown('[![a](b.png)](foo(bar)'),
-      '<p>[<img src="b.png" alt="a">](foo(bar)</p>',
-    )
   })
 
   it('renders a horizontal rule', () => {

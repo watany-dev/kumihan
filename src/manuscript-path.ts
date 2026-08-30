@@ -15,11 +15,6 @@ export function imageContentType(filePath: string): string | undefined {
   return IMAGE_TYPE.get(extname(filePath).toLowerCase())
 }
 
-/**
- * 原稿ディレクトリ基準の相対パスを、読める画像ファイルへ解決します。
- * 空・NUL・バックスラッシュ・スキーム・絶対パス・allowlist 外・root 外
- * （`../` と symlink）は null。
- */
 export async function resolveManuscriptFile(root: string, rel: string): Promise<string | null> {
   let decoded: string
   try {

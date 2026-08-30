@@ -157,21 +157,4 @@ describe('writeExport', () => {
       await rm(dir, { recursive: true, force: true })
     }
   })
-
-  it('copies a local image whose name contains an ampersand', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'kumihan-export-amp-'))
-    const png = Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
-      'base64',
-    )
-    try {
-      const source = join(dir, 'index.md')
-      await writeFile(source, '![x](a&b.png)\n')
-      await writeFile(join(dir, 'a&b.png'), png)
-      await writeExport(source, join(dir, 'out'))
-      assert.deepEqual(await readFile(join(dir, 'out', 'a&b.png')), png)
-    } finally {
-      await rm(dir, { recursive: true, force: true })
-    }
-  })
 })

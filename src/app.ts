@@ -28,10 +28,6 @@ const CSS_HEADERS = {
   'Cache-Control': 'no-store',
 } as const
 
-const IMAGE_HEADERS = {
-  'Cache-Control': 'no-store',
-} as const
-
 export function createPreviewApp(config: PreviewConfig = { source: './content/index.md' }): Hono {
   const title = config.title ?? 'Typeset Preview'
   const language = config.language ?? 'ja'
@@ -51,19 +47,15 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
   app.get('/web', (c) => serveManuscript(c, 'web'))
 
   app.get('/*', async (c) => {
-    const rel = c.req.path.startsWith('/') ? c.req.path.slice(1) : c.req.path
+    const rel = c.req.path.slice(1)
     const file = await resolveManuscriptFile(root, rel)
-    if (file === null) {
-      return c.body('', 404)
-    }
+    if (file === null) return c.body('', 404)
     const type = imageContentType(rel) ?? imageContentType(file)
-    if (type === undefined) {
-      return c.body('', 404)
-    }
+    if (type === undefined) return c.body('', 404)
     try {
       return c.body(await readFile(file), 200, {
-        ...IMAGE_HEADERS,
         'Content-Type': type,
+        'Cache-Control': 'no-store',
       })
     } catch {
       return c.body('', 404)
