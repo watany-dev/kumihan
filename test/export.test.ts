@@ -116,4 +116,62 @@ describe('writeExport', () => {
       await rm(dir, { recursive: true, force: true })
     }
   })
+
+  it('copies local images and leaves http(s) src in place', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'kumihan-export-img-'))
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64',
+    )
+    const logged: string[] = []
+    const original = console.error
+    console.error = (...args: unknown[]) => {
+      logged.push(args.map(String).join(' '))
+    }
+    try {
+      const source = join(dir, 'index.md')
+      await writeFile(
+        source,
+        '![図](a.png)\n\n![x](https://example.com/b.png)\n\n![y](missing.png)\n',
+      )
+      await writeFile(join(dir, 'a.png'), png)
+      const out = join(dir, 'out')
+      const written = await writeExport(source, out)
+      assert.ok(written.some((path) => path.endsWith('a.png')))
+      assert.deepEqual(await readFile(join(out, 'a.png')), png)
+      const html = await readFile(join(out, 'index.html'), 'utf8')
+      const magazine = await readFile(join(out, 'magazine.html'), 'utf8')
+      const web = await readFile(join(out, 'web.html'), 'utf8')
+      assert.match(html, /src="a.png"/)
+      assert.match(magazine, /src="a.png"/)
+      assert.match(web, /src="a.png"/)
+      assert.match(html, /src="https:\/\/example.com\/b.png"/)
+      assert.equal(html.includes('src="missing.png"'), true)
+      assert.equal(
+        written.some((path) => path.endsWith('b.png')),
+        false,
+      )
+      assert.ok(logged.some((line) => line.includes('missing.png')))
+    } finally {
+      console.error = original
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('copies a local image whose name contains an ampersand', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'kumihan-export-amp-'))
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64',
+    )
+    try {
+      const source = join(dir, 'index.md')
+      await writeFile(source, '![x](a&b.png)\n')
+      await writeFile(join(dir, 'a&b.png'), png)
+      await writeExport(source, join(dir, 'out'))
+      assert.deepEqual(await readFile(join(dir, 'out', 'a&b.png')), png)
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
 })

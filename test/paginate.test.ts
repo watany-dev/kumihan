@@ -83,6 +83,13 @@ describe('paginate', () => {
     assert.equal(paginate('タグのない文章', MAGAZINE_LINES_PER_PAGE)[0], 'タグのない文章')
   })
 
+  it('does not let a bare img swallow the rest of the page', () => {
+    const pages = paginate('<img src="a.png" alt="x">\n<p>後</p>', 1)
+    assert.equal(pages.length, 2)
+    assert.equal(pages[0], '<img src="a.png" alt="x">')
+    assert.equal(pages[1], '<p>後</p>')
+  })
+
   it('takes the rest of the input when a tag is unclosed', () => {
     assert.equal(paginate('<p>閉じない', MAGAZINE_LINES_PER_PAGE)[0], '<p>閉じない')
     assert.equal(paginate('<p', MAGAZINE_LINES_PER_PAGE)[0], '<p')

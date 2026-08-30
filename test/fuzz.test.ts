@@ -38,6 +38,7 @@ const INLINE = [
   '\u0001',
   'x:',
   'javascript:',
+  '![',
   '|',
   '\\|',
 ]
@@ -68,7 +69,7 @@ function generate(seed: number): string {
   return source
 }
 
-const VOID_TAGS = new Set(['br', 'hr'])
+const VOID_TAGS = new Set(['br', 'hr', 'img'])
 const ALLOWED_TAGS = new Set([
   'p',
   'h1',
@@ -76,6 +77,7 @@ const ALLOWED_TAGS = new Set([
   'h3',
   'hr',
   'br',
+  'img',
   'blockquote',
   'ul',
   'ol',
@@ -149,6 +151,19 @@ function findProblems(html: string): string[] {
     if (!tag.closing && tag.attributes.trim() !== '') {
       if (tag.name === 'a') {
         // href は後で見る。
+      } else if (tag.name === 'img') {
+        const img = /^\ssrc="([^"]*)" alt="([^"]*)"$/.exec(tag.attributes)
+        if (img === null) {
+          problems.push(`想定していない属性: ${tag.raw}`)
+        } else {
+          const src = img[1] ?? ''
+          const scheme = /^([a-zA-Z][a-zA-Z0-9+.-]*):/
+            .exec(src.replace(/\s+/g, ''))?.[1]
+            ?.toLowerCase()
+          if (scheme !== undefined && scheme !== 'http' && scheme !== 'https') {
+            problems.push(`危険なスキームの src: ${JSON.stringify(src)}`)
+          }
+        }
       } else if (
         (tag.name === 'th' || tag.name === 'td') &&
         /^\sclass="align-(left|center|right)"$/.test(tag.attributes)

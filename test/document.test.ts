@@ -17,6 +17,7 @@ describe('renderDocument', () => {
     assert.match(html, /<title>組版<\/title>/)
     assert.match(html, /http-equiv="Content-Security-Policy"/)
     assert.match(html, /content="default-src 'none'/)
+    assert.match(html, /img-src 'self' https: http:/)
     assert.equal(html.includes('frame-ancestors'), false)
     assert.match(html, /name="referrer" content="no-referrer"/)
     assert.match(html, /<div class="paper">/)

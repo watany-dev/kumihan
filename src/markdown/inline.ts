@@ -1,9 +1,12 @@
-import { escapeHtml, sanitizeUrl } from './escape.js'
+import { escapeHtml, sanitizeImageUrl, sanitizeUrl } from './escape.js'
 import { HARD_BREAK } from './hard-break.js'
 
 const BACKTICK = 0x60
 const BRACKET_OPEN = 0x5b
 const ASTERISK = 0x2a
+const BANG = 0x21
+const BRACKET_CLOSE = 0x5d
+const PAREN_OPEN = 0x28
 
 /**
  * インライン記法を開始しうる文字の次の位置を返します。それ以外の文字は
@@ -12,7 +15,7 @@ const ASTERISK = 0x2a
 function nextMarkerIndex(source: string, from: number): number {
   for (let i = from; i < source.length; i += 1) {
     const code = source.charCodeAt(i)
-    if (code === BACKTICK || code === BRACKET_OPEN || code === ASTERISK) {
+    if (code === BACKTICK || code === BRACKET_OPEN || code === ASTERISK || code === BANG) {
       return i
     }
   }
@@ -68,7 +71,7 @@ export function renderInline(source: string): string {
       if (i === source.length) break
     }
 
-    // ここに来る文字は必ず `\``・`[`・`*` のいずれかなので、
+    // ここに来る文字は必ず `\``・`[`・`*`・`!` のいずれかなので、
     // 対応する記法だけを試します。
     const parsed = parseMarker(source, i, exhausted)
     if (parsed) {
@@ -104,7 +107,18 @@ function parseMarker(
     return code ? { html: `<code>${escapeHtml(literal(code.text))}</code>`, end: code.end } : null
   }
 
+  if (marker === BANG && source.charCodeAt(start + 1) === BRACKET_OPEN) {
+    const image = parseLink(source, start + 1, exhausted)
+    return image ? { html: renderImage(image.text, image.url), end: image.end } : null
+  }
+
   if (marker === BRACKET_OPEN) {
+    // `[![alt](src)](href)` は、先に内側の `](` を拾うと画像にならない。
+    if (source.startsWith('![', start + 1)) {
+      const linked = parseLinkedImage(source, start, exhausted)
+      if (linked) return linked
+      return null
+    }
     const link = parseLink(source, start, exhausted)
     if (!link) return null
     // URL の中身も文字どおり。目印のまま sanitizeUrl へ渡すと制御文字と
@@ -128,8 +142,36 @@ function literal(text: string): string {
   return text.includes(HARD_BREAK) ? text.replaceAll(HARD_BREAK, ' ') : text
 }
 
+function renderImage(alt: string, url: string): string {
+  return `<img src="${escapeHtml(sanitizeImageUrl(literal(url)))}" alt="${escapeHtml(literal(alt))}">`
+}
+
 // URL の区切りになる文字。空白と、強制改行の目印（元は行末の空白）。
 const URL_SEPARATOR = new RegExp(`[\\s${HARD_BREAK}]`)
+
+function parseLinkedImage(
+  source: string,
+  start: number,
+  exhausted: ClosersExhausted,
+): { html: string; end: number } | null {
+  const image = parseLink(source, start + 2, exhausted)
+  if (!image) return null
+  if (
+    source.charCodeAt(image.end) !== BRACKET_CLOSE ||
+    source.charCodeAt(image.end + 1) !== PAREN_OPEN
+  ) {
+    return null
+  }
+  const urlStart = image.end + 2
+  const urlEnd = source.indexOf(')', urlStart)
+  if (urlEnd === -1) return null
+  const url = source.slice(urlStart, urlEnd)
+  if (URL_SEPARATOR.test(url) || url.includes('(')) return null
+  return {
+    html: `<a href="${escapeHtml(sanitizeUrl(literal(url)))}">${renderImage(image.text, image.url)}</a>`,
+    end: urlEnd + 1,
+  }
+}
 
 /**
  * 呼び出し元は `source[start]` が `[` であることを保証します。

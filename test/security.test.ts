@@ -33,6 +33,10 @@ function hrefs(html: string): string[] {
   return [...html.matchAll(/href="([^"]*)"/g)].map((match) => match[1] ?? '')
 }
 
+function srcs(html: string): string[] {
+  return [...html.matchAll(/src="([^"]*)"/g)].map((match) => match[1] ?? '')
+}
+
 describe('unsafe URL rejection', () => {
   it('rejects javascript: URLs', () => {
     assert.deepEqual(hrefs(renderMarkdown('[x](javascript:alert1)')), ['#'])
@@ -67,6 +71,29 @@ describe('unsafe URL rejection', () => {
   it('rejects URLs that contain control characters', () => {
     const html = renderMarkdown('[x](https://example.com/\u0000evil)')
     assert.match(html, /href="#"/)
+  })
+})
+
+describe('unsafe image URL rejection', () => {
+  it('rejects javascript: image URLs', () => {
+    assert.deepEqual(srcs(renderMarkdown('![x](javascript:alert1)')), ['#'])
+    assert.equal(renderMarkdown('![x](javascript:alert1)').includes('javascript:'), false)
+  })
+
+  it('rejects mailto: image URLs', () => {
+    assert.deepEqual(srcs(renderMarkdown('![x](mailto:a@b)')), ['#'])
+  })
+
+  it('escapes alt text', () => {
+    const html = renderMarkdown('![<script>](a.png)')
+    assert.equal(html.includes('<script>'), false)
+    assert.equal(html, '<p><img src="a.png" alt="&lt;script&gt;"></p>')
+  })
+
+  it('does not emit a raw img tag from the manuscript', () => {
+    const html = renderMarkdown('<img src="x">')
+    assert.equal(html.includes('<img'), false)
+    assert.match(html, /&lt;img src=&quot;x&quot;&gt;/)
   })
 })
 

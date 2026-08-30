@@ -164,6 +164,11 @@ body.web {
   text-decoration: none;
 }
 
+.article img {
+  max-width: 100%;
+  height: auto;
+}
+
 .article a:hover {
   text-decoration: underline;
   text-underline-offset: 0.18em;
