@@ -123,7 +123,6 @@ function blocksOf(html: string, layout: PageLayout): CountCache & { blocks: stri
   const counts: number[] = []
   const flows: number[] = []
   let previous = ''
-  let first = true
   for (const block of cachedBlocks) {
     const tag = tagNameOf(block)
     // 隣り合う余白は重なります（margin collapsing）。足し合わせたままだと、
@@ -134,11 +133,11 @@ function blocksOf(html: string, layout: PageLayout): CountCache & { blocks: stri
     // ブロックが次の段へ送られたあとの残り）がそのぶんあります。Chromium で
     // 測ると、重なりを当てにした 2段の頁は段 1 本 40 行のところ 43 行に組まれ、
     // 紙からはみ出しました。重なるぶんはその空きに充てます。
-    const overlap = first || layout.columns > 1 ? 0 : collapsedLead(previous, tag, layout)
+    // 最初のブロックは previous が空で、重なりはそのまま 0 になります。
+    const overlap = layout.columns > 1 ? 0 : collapsedLead(previous, tag, layout)
     counts.push(blockLines(block, layout) - overlap)
     flows.push(flowOf(tag, block, previous, layout))
     previous = tag
-    first = false
   }
 
   // 覚えるのは組版と 2段のぶんだけ。それ以上は古いものから捨てます。
@@ -414,8 +413,6 @@ interface BlockMetrics {
   pad: number
   /** 行のまとまり（箇条書きの項目、引用の段落）ごとの余白。 */
   runLead: number
-  /** 最後のまとまりも余白を持つか。引用の中の段落は `p:last-child` で持たない。 */
-  runLeadOnLast: boolean
 }
 
 /** em を本文行に直す。points はその em の基準になる級数。 */
@@ -433,7 +430,6 @@ function plain(overrides: Partial<BlockMetrics>): BlockMetrics {
     leadBottom: 0,
     pad: 0,
     runLead: 0,
-    runLeadOnLast: true,
     ...overrides,
   }
 }
@@ -477,11 +473,11 @@ function metricsOf(tag: string, layout: PageLayout): BlockMetrics {
       return plain({
         indentEm: QUOTE_INDENT_EM,
         leadTop: toLines(QUOTE_MARGIN_EM, body, layout),
-        leadBottom: toLines(QUOTE_MARGIN_EM, body, layout),
+        // 引用の最後の段落は `p:last-child` で下の余白を持ちません。段落ごとに
+        // 数えたぶんから、その 1 つぶんを引いておきます。
+        leadBottom: toLines(QUOTE_MARGIN_EM - QUOTE_ITEM_MARGIN_EM, body, layout),
         pad: toLines(QUOTE_PADDING_EM, body, layout),
         runLead: toLines(QUOTE_ITEM_MARGIN_EM, body, layout),
-        // 引用の最後の段落は `p:last-child` で下の余白を持ちません。
-        runLeadOnLast: false,
       })
     case 'pre':
       return plain({
@@ -537,13 +533,12 @@ export function blockLines(block: string, layout: PageLayout): number {
   )
 
   const counted = tag === 'table' ? tableRuns(block, capacity) : textRuns(block, capacity)
-  const runs = metrics.runLeadOnLast ? counted.runs : Math.max(counted.runs - 1, 0)
   const height =
     metrics.leadTop +
     metrics.leadBottom +
     metrics.pad +
     counted.lines * metrics.lineRatio +
-    runs * metrics.runLead +
+    counted.runs * metrics.runLead +
     imageExtraLines(block, layout)
 
   // 何も組まれないブロックでも、詰め込みが進むよう 1 行は取ります。

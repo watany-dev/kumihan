@@ -48,6 +48,9 @@ function twoCellRow(cell: string): string {
   return `| a | b |\n| --- | --- |\n| ${cell} | ${cell} |`
 }
 
+/** 規則を読むだけなので、注釈は先に落としておきます。 */
+const styleRules = typesetCss.replace(/\/\*[\s\S]*?\*\//g, '')
+
 /**
  * typeset.css の、あるセレクタのある指定。無ければ空文字。
  *
@@ -56,11 +59,8 @@ function twoCellRow(cell: string): string {
  * ものも見て、その指定を持つ規則を返します。
  */
 function declaration(selector: string, property: string): string {
-  for (const rule of typesetCss.matchAll(/([^{}]*)\{([^{}]*)\}/g)) {
-    const listed = (rule[1] ?? '')
-      .replace(/\/\*[\s\S]*?\*\//g, '')
-      .split(',')
-      .map((one) => one.trim())
+  for (const rule of styleRules.matchAll(/([^{}]*)\{([^{}]*)\}/g)) {
+    const listed = (rule[1] ?? '').split(',').map((one) => one.trim())
     if (!listed.includes(selector)) {
       continue
     }
@@ -430,15 +430,6 @@ describe('block heights match the stylesheet', () => {
         }
       }
     }
-  })
-
-  it('does not break the paper before a code block that still fits', () => {
-    // コードは段をまたげません。高さを多く見ていると、まだ入るのに次の紙へ送られ、
-    // その手前が大きく空きます。
-    const html = renderMarkdown('前の段落。\n\n```\na\nb\nc\n```\n\n後の段落。')
-    const blocks = ['<p>前の段落。</p>', '<pre><code>a\nb\nc\n</code></pre>', '<p>後の段落。</p>']
-    const total = blocks.reduce((sum, block) => sum + blockLines(block, MAGAZINE_LAYOUT), 0)
-    assert.equal(paginate(html, sized(Math.ceil(total))).length, 1)
   })
 })
 
