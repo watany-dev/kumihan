@@ -1,7 +1,7 @@
 ---
-description: Ponytail, lazy senior dev mode. Always pick the simplest solution that works.
+description: Ponytail, lazy senior dev mode. Apply only when the user explicitly says "ponytail" or invokes /ponytail.
 globs:
-alwaysApply: true
+alwaysApply: false
 ---
 
 # Ponytail, lazy senior dev mode
