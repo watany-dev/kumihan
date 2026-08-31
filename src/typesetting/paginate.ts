@@ -125,7 +125,17 @@ function blocksOf(html: string, layout: PageLayout): CountCache & { blocks: stri
   let previous = ''
   for (const block of cachedBlocks) {
     const tag = tagNameOf(block)
-    counts.push(blockLines(block, layout))
+    // 隣り合う余白は重なります（margin collapsing）。足し合わせたままだと、
+    // 見出しや引用のたびに 0.5 行ずつ多く見積もり、紙の下が空きます。
+    //
+    // 引くのは 1段組だけです。2段組は段の変わり目で余白が重ならないうえ、
+    // 詰め込みが見ていない空き（`widows` / `orphans` の 2 行、段をまたげない
+    // ブロックが次の段へ送られたあとの残り）がそのぶんあります。Chromium で
+    // 測ると、重なりを当てにした 2段の頁は段 1 本 40 行のところ 43 行に組まれ、
+    // 紙からはみ出しました。重なるぶんはその空きに充てます。
+    // 最初のブロックは previous が空で、重なりはそのまま 0 になります。
+    const overlap = layout.columns > 1 ? 0 : collapsedLead(previous, tag, layout)
+    counts.push(blockLines(block, layout) - overlap)
     flows.push(flowOf(tag, block, previous, layout))
     previous = tag
   }
@@ -355,28 +365,34 @@ const FULL = 2
 const PARAGRAPH_MARGIN_EM = 0.9
 const HEADING_LINE_HEIGHT = 1.45
 const H1_POINTS = 18
-const H1_MARGIN_EM = 1.1
+const H1_MARGIN_BOTTOM_EM = 1.1
 const H1_LETTER_SPACING_EM = 0.06
 const H2_POINTS = 13.5
-const H2_MARGIN_EM = 1.8 + 0.7 + 0.28
+const H2_MARGIN_TOP_EM = 1.8
+const H2_MARGIN_BOTTOM_EM = 0.7
+// 下罫の手前の詰め。padding は余白と違って重ならないので、別に数えます。
+const H2_PADDING_EM = 0.28
 const H3_POINTS = 12
-const H3_MARGIN_EM = 1.5 + 0.5
+const H3_MARGIN_TOP_EM = 1.5
+const H3_MARGIN_BOTTOM_EM = 0.5
 const LIST_MARGIN_EM = 0.9
 const LIST_INDENT_EM = 1.5
 // 隣り合う項目の margin は重なるので、項目ごとに数えるのは片側だけ。
 const LIST_ITEM_MARGIN_EM = 0.15
-const QUOTE_MARGIN_EM = 1.2 + 1.2 + 0.15 + 0.15
+const QUOTE_MARGIN_EM = 1.2
+const QUOTE_PADDING_EM = 0.15 + 0.15
 const QUOTE_INDENT_EM = 0.4 + 1
 const QUOTE_ITEM_MARGIN_EM = 0.9
 const CODE_RATIO = 0.92
 const CODE_LINE_HEIGHT = 1.6
-const CODE_MARGIN_EM = 1.1 + 1 + 1
+const CODE_MARGIN_EM = 1.1
+const CODE_PADDING_EM = 1 + 1
 const CODE_INDENT_EM = 1.1 + 1.1
 const TABLE_RATIO = 0.95
 const TABLE_MARGIN_EM = 1.1
 const CELL_PADDING_Y_EM = 0.35 + 0.35
 const CELL_PADDING_X_EM = 0.65 + 0.65
-const RULE_MARGIN_EM = 2 + 2
+const RULE_MARGIN_EM = 2
 
 // 等幅の半角は本文の半角より広い。字送りは書体しだいだが、おおむね 0.6em。
 const MONOSPACE_WIDTH = 1.2
@@ -389,8 +405,12 @@ interface BlockMetrics {
   lineRatio: number
   /** 段から削られる幅（本文 em）。 */
   indentEm: number
-  /** ブロックの前後の余白。 */
-  lead: number
+  /** ブロックの上の余白。前のブロックの下の余白と重なる。 */
+  leadTop: number
+  /** ブロックの下の余白。 */
+  leadBottom: number
+  /** 上下の詰め（padding・罫）。余白と違って重ならない。 */
+  pad: number
   /** 行のまとまり（箇条書きの項目、引用の段落）ごとの余白。 */
   runLead: number
 }
@@ -400,82 +420,102 @@ function toLines(em: number, points: number, layout: PageLayout): number {
   return (em * points) / (layout.bodyPoints * layout.lineHeight)
 }
 
+/** 地の文と同じ字と行送りで組まれるブロックの、余白だけが違う見積り。 */
+function plain(overrides: Partial<BlockMetrics>): BlockMetrics {
+  return {
+    fontRatio: 1,
+    lineRatio: 1,
+    indentEm: 0,
+    leadTop: 0,
+    leadBottom: 0,
+    pad: 0,
+    runLead: 0,
+    ...overrides,
+  }
+}
+
 function heading(
   points: number,
-  marginEm: number,
+  marginTopEm: number,
+  marginBottomEm: number,
+  paddingEm: number,
   letterSpacingEm: number,
   layout: PageLayout,
 ): BlockMetrics {
-  return {
+  return plain({
     fontRatio: (points / layout.bodyPoints) * (1 + letterSpacingEm),
     lineRatio: toLines(HEADING_LINE_HEIGHT, points, layout),
-    indentEm: 0,
-    lead: toLines(marginEm, points, layout),
-    runLead: 0,
-  }
+    leadTop: toLines(marginTopEm, points, layout),
+    leadBottom: toLines(marginBottomEm, points, layout),
+    pad: toLines(paddingEm, points, layout),
+  })
 }
 
 function metricsOf(tag: string, layout: PageLayout): BlockMetrics {
   const body = layout.bodyPoints
   switch (tag) {
     case 'h1':
-      return heading(H1_POINTS, H1_MARGIN_EM, H1_LETTER_SPACING_EM, layout)
+      return heading(H1_POINTS, 0, H1_MARGIN_BOTTOM_EM, 0, H1_LETTER_SPACING_EM, layout)
     case 'h2':
-      return heading(H2_POINTS, H2_MARGIN_EM, 0, layout)
+      return heading(H2_POINTS, H2_MARGIN_TOP_EM, H2_MARGIN_BOTTOM_EM, H2_PADDING_EM, 0, layout)
     case 'h3':
-      return heading(H3_POINTS, H3_MARGIN_EM, 0, layout)
+      return heading(H3_POINTS, H3_MARGIN_TOP_EM, H3_MARGIN_BOTTOM_EM, 0, 0, layout)
     case 'p':
-      return {
-        fontRatio: 1,
-        lineRatio: 1,
-        indentEm: 0,
-        lead: toLines(PARAGRAPH_MARGIN_EM, body, layout),
-        runLead: 0,
-      }
+      return plain({ leadBottom: toLines(PARAGRAPH_MARGIN_EM, body, layout) })
     case 'ul':
     case 'ol':
-      return {
-        fontRatio: 1,
-        lineRatio: 1,
+      return plain({
         indentEm: LIST_INDENT_EM,
-        lead: toLines(LIST_MARGIN_EM, body, layout),
+        leadBottom: toLines(LIST_MARGIN_EM, body, layout),
         runLead: toLines(LIST_ITEM_MARGIN_EM, body, layout),
-      }
+      })
     case 'blockquote':
-      return {
-        fontRatio: 1,
-        lineRatio: 1,
+      return plain({
         indentEm: QUOTE_INDENT_EM,
-        lead: toLines(QUOTE_MARGIN_EM, body, layout),
+        leadTop: toLines(QUOTE_MARGIN_EM, body, layout),
+        // 引用の最後の段落は `p:last-child` で下の余白を持ちません。段落ごとに
+        // 数えたぶんから、その 1 つぶんを引いておきます。
+        leadBottom: toLines(QUOTE_MARGIN_EM - QUOTE_ITEM_MARGIN_EM, body, layout),
+        pad: toLines(QUOTE_PADDING_EM, body, layout),
         runLead: toLines(QUOTE_ITEM_MARGIN_EM, body, layout),
-      }
+      })
     case 'pre':
-      return {
+      return plain({
         fontRatio: CODE_RATIO * MONOSPACE_WIDTH,
         lineRatio: toLines(CODE_LINE_HEIGHT, CODE_RATIO * body, layout),
         indentEm: CODE_INDENT_EM * CODE_RATIO,
-        lead: toLines(CODE_MARGIN_EM, CODE_RATIO * body, layout),
-        runLead: 0,
-      }
+        leadBottom: toLines(CODE_MARGIN_EM, CODE_RATIO * body, layout),
+        pad: toLines(CODE_PADDING_EM, CODE_RATIO * body, layout),
+      })
     case 'table':
-      return {
+      return plain({
         fontRatio: TABLE_RATIO,
         lineRatio: toLines(layout.lineHeight, TABLE_RATIO * body, layout),
-        indentEm: 0,
-        lead: toLines(TABLE_MARGIN_EM, TABLE_RATIO * body, layout),
+        leadBottom: toLines(TABLE_MARGIN_EM, TABLE_RATIO * body, layout),
         runLead: toLines(CELL_PADDING_Y_EM, TABLE_RATIO * body, layout),
-      }
+      })
     case 'hr':
-      return {
-        fontRatio: 1,
-        lineRatio: 1,
-        indentEm: 0,
-        lead: toLines(RULE_MARGIN_EM, body, layout),
-        runLead: 0,
-      }
+      // 罫そのものは 0.4pt で、高さは上下の余白がほとんど。行は取りません。
+      return plain({
+        lineRatio: 0,
+        leadTop: toLines(RULE_MARGIN_EM, body, layout),
+        leadBottom: toLines(RULE_MARGIN_EM, body, layout),
+      })
     default:
-      return { fontRatio: 1, lineRatio: 1, indentEm: 0, lead: 0, runLead: 0 }
+      return plain({})
   }
+}
+
+/**
+ * 上下に並ぶブロックで重なる余白（本文行）。
+ *
+ * 上のブロックの下の余白と、下のブロックの上の余白は、CSS では重なって
+ * 大きいほうだけが残ります（margin collapsing）。引き方は blocksOf を見てください。
+ */
+function collapsedLead(previousTag: string, tag: string, layout: PageLayout): number {
+  const above = metricsOf(previousTag, layout).leadBottom
+  const below = metricsOf(tag, layout).leadTop
+  return above < below ? above : below
 }
 
 /**
@@ -494,7 +534,9 @@ export function blockLines(block: string, layout: PageLayout): number {
 
   const counted = tag === 'table' ? tableRuns(block, capacity) : textRuns(block, capacity)
   const height =
-    metrics.lead +
+    metrics.leadTop +
+    metrics.leadBottom +
+    metrics.pad +
     counted.lines * metrics.lineRatio +
     counted.runs * metrics.runLead +
     imageExtraLines(block, layout)

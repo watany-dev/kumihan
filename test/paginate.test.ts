@@ -48,16 +48,55 @@ function twoCellRow(cell: string): string {
   return `| a | b |\n| --- | --- |\n| ${cell} | ${cell} |`
 }
 
-/** typeset.css の、あるセレクタのある指定。無ければ空文字。 */
+/** 規則を読むだけなので、注釈は先に落としておきます。 */
+const styleRules = typesetCss.replace(/\/\*[\s\S]*?\*\//g, '')
+
+/**
+ * typeset.css の、あるセレクタのある指定。無ければ空文字。
+ *
+ * 同じセレクタは複数の規則に出ます（見出しは行送りをまとめた規則と、級数と
+ * 余白をそれぞれ持つ規則）。まとめた規則をセレクタで引けるよう、`,` で並んだ
+ * ものも見て、その指定を持つ規則を返します。
+ */
 function declaration(selector: string, property: string): string {
-  const rule = new RegExp(`${selector.replace('.', '\\.')}\\s*\\{([^}]*)\\}`).exec(typesetCss)
-  const found = new RegExp(`(?:^|;|\\n)\\s*${property}\\s*:\\s*([^;]+)`).exec(rule?.[1] ?? '')
-  return (found?.[1] ?? '').trim()
+  for (const rule of styleRules.matchAll(/([^{}]*)\{([^{}]*)\}/g)) {
+    const listed = (rule[1] ?? '').split(',').map((one) => one.trim())
+    if (!listed.includes(selector)) {
+      continue
+    }
+    const found = new RegExp(`(?:^|;|\\n)\\s*${property}\\s*:\\s*([^;]+)`).exec(rule[2] ?? '')
+    if (found !== null) {
+      return (found[1] ?? '').trim()
+    }
+  }
+  return ''
 }
 
 /** pt を mm に。 */
 function mm(points: number): number {
   return points * 0.352778
+}
+
+/** `13.5pt` や `1.8em` のような指定の数。 */
+function unit(value: string): number {
+  return Number.parseFloat(value)
+}
+
+/** `1.8em 0 0.7em` のような指定の、上と下。 */
+function vertical(shorthand: string): { top: number; bottom: number } {
+  const parts = shorthand.split(/\s+/).map(unit)
+  return { top: parts[0] ?? 0, bottom: parts[2] ?? parts[0] ?? 0 }
+}
+
+/** その要素の em を本文行に。points はその要素の級数。 */
+function emLines(em: number, points: number, layout: PageLayout): number {
+  return (em * points) / (layout.bodyPoints * layout.lineHeight)
+}
+
+/** その要素の級数（pt）。`0.92em` のように本文からの倍率で書いたものも読む。 */
+function typePoints(selector: string, layout: PageLayout): number {
+  const size = declaration(selector, 'font-size')
+  return size.endsWith('em') ? unit(size) * layout.bodyPoints : unit(size)
 }
 
 describe('paginate', () => {
@@ -261,6 +300,139 @@ describe('block heights', () => {
   })
 })
 
+// ブロックの高さは種類ごとに違います。18pt の見出しも、上下に 1em の詰めを持つ
+// コードも、本文 1 行として数えていた頃は、見出しが紙の下端をまたぎ、コードの
+// 前後で紙が空きました。組み上がりは typeset.css の指定そのものなので、
+// 見積りが CSS と同じ数字を見ていることを、ブロックの種類ごとに確かめます。
+describe('block heights match the stylesheet', () => {
+  it('takes a heading from its type size, its margins and its rule', () => {
+    // 見出し 3 つの行送りは 1 つの規則にまとめてあります（最後の .typeset h3 で引く）。
+    const headingLineHeight = unit(declaration('.typeset h3', 'line-height'))
+
+    for (const [tag, marker] of [
+      ['h1', '# '],
+      ['h2', '## '],
+      ['h3', '### '],
+    ] as const) {
+      for (const layout of [PRINT_LAYOUT, MAGAZINE_LAYOUT]) {
+        const selector = `.typeset ${tag}`
+        const size = typePoints(selector, layout)
+        const space = vertical(declaration(selector, 'margin'))
+        // h2 だけが下罫の手前に詰めを持ちます。
+        const padding = unit(declaration(selector, 'padding-bottom') || '0')
+        near(
+          height(`${marker}節`, layout),
+          emLines(space.top + space.bottom + padding + headingLineHeight, size, layout),
+          `${tag} ${layout.columnChars}`,
+        )
+      }
+    }
+  })
+
+  it('takes a code block from its padding and its line spacing', () => {
+    for (const layout of [PRINT_LAYOUT, MAGAZINE_LAYOUT]) {
+      const size = typePoints('.typeset pre', layout)
+      const space = vertical(declaration('.typeset pre', 'margin'))
+      const padding = vertical(declaration('.typeset pre', 'padding'))
+      const spacing = unit(declaration('.typeset pre', 'line-height'))
+      // 中の 3 行は折り返さずに数え、上下の詰めと余白を足します。
+      near(
+        height('```\na\nb\nc\n```', layout),
+        emLines(space.top + space.bottom + padding.top + padding.bottom, size, layout) +
+          3 * emLines(spacing, size, layout),
+        `pre ${layout.columnChars}`,
+      )
+    }
+  })
+
+  it('takes a quotation from its margins, its padding and the paragraphs inside', () => {
+    for (const layout of [PRINT_LAYOUT, MAGAZINE_LAYOUT]) {
+      const body = layout.bodyPoints
+      const space = vertical(declaration('.typeset blockquote', 'margin'))
+      const padding = vertical(declaration('.typeset blockquote', 'padding'))
+      const frame = emLines(space.top + space.bottom + padding.top + padding.bottom, body, layout)
+
+      // 1 段落の引用は、その 1 行と枠だけ。最後の段落は `p:last-child` で
+      // 下の余白を持ちません。
+      near(height('> 引用', layout), frame + 1, `blockquote ${layout.columnChars}`)
+
+      // 段落が増えると、その間の余白（p の margin-bottom）が 1 つずつ増えます。
+      const paragraph = vertical(declaration('.typeset p', 'margin'))
+      near(
+        height('> 引用\n>\n> 続き', layout) - height('> 引用', layout),
+        1 + emLines(paragraph.bottom, body, layout),
+        `blockquote paragraph ${layout.columnChars}`,
+      )
+    }
+  })
+
+  it('takes a list from the items and the space between them', () => {
+    for (const layout of [PRINT_LAYOUT, MAGAZINE_LAYOUT]) {
+      const body = layout.bodyPoints
+      const space = vertical(declaration('.typeset ul', 'margin'))
+      const item = vertical(declaration('.typeset li', 'margin'))
+      near(
+        height('- あ\n- い\n- う', layout),
+        3 + emLines(space.top + space.bottom + 3 * item.top, body, layout),
+        `list ${layout.columnChars}`,
+      )
+    }
+  })
+
+  it('takes a table from its rows and the padding in the cells', () => {
+    for (const layout of [PRINT_LAYOUT, MAGAZINE_LAYOUT]) {
+      const size = typePoints('.typeset table', layout)
+      const space = vertical(declaration('.typeset table', 'margin'))
+      const cell = vertical(declaration('.typeset th', 'padding'))
+      // 見出し行と本文 2 行。どのセルも折り返しません。
+      near(
+        height('| a | b |\n| --- | --- |\n| 1 | 2 |\n| 3 | 4 |', layout),
+        3 * emLines(layout.lineHeight, size, layout) +
+          emLines(space.top + space.bottom + 3 * (cell.top + cell.bottom), size, layout),
+        `table ${layout.columnChars}`,
+      )
+    }
+  })
+
+  it('takes a rule from its margins alone', () => {
+    // 罫は 0.4pt で、高さはほとんど上下の余白です。1 行と数えていた頃は、
+    // 区切りのたびに紙が 1 行ぶん余計に埋まっていました。
+    for (const layout of [PRINT_LAYOUT, MAGAZINE_LAYOUT]) {
+      const space = vertical(declaration('.typeset hr', 'margin'))
+      near(
+        height('---', layout),
+        emLines(space.top + space.bottom, layout.bodyPoints, layout),
+        `hr ${layout.columnChars}`,
+      )
+    }
+  })
+
+  it('overlaps the margins where two blocks meet', () => {
+    // 段落の下 0.9em と見出しの上 1.8em は、CSS では重なって 1 つの余白になります。
+    // 足し合わせたままだと、見出しのたびに 0.5 行ずつ多く見積もり、紙の下が空きます。
+    const blocks = ['<p>本文です。</p>', '<h2>節</h2>', '<p>本文です。</p>']
+    const separate = blocks.reduce((total, block) => total + blockLines(block, MAGAZINE_LAYOUT), 0)
+    const overlap = 0.9 / MAGAZINE_LAYOUT.lineHeight
+    const paper = Math.ceil(separate - overlap)
+
+    // 重ならないと見た高さでは入らない紙に、重なるぶんで収まります。
+    assert.ok(separate > paper, `${separate} <= ${paper}`)
+    assert.equal(paginate(blocks.join('\n'), sized(paper)).length, 1)
+  })
+
+  it('never leaves a heading at the foot of the paper', () => {
+    // 見出しは `break-after: avoid`。紙の下端に残ると、次の紙に本文だけが出ます。
+    for (const layout of [PRINT_LAYOUT, MAGAZINE_LAYOUT]) {
+      for (let before = 1; before <= 40; before += 1) {
+        const source = `${paragraphs(before)}\n\n## 節\n\n${paragraphs(6)}`
+        for (const page of paginate(renderMarkdown(source), layout)) {
+          assert.equal(page.trimEnd().endsWith('</h2>'), false, `${before}`)
+        }
+      }
+    }
+  })
+})
+
 /** CSS ピクセルを mm に。1px = 1/96 インチ。 */
 function px(count: number): number {
   return (count * 25.4) / 96
@@ -281,8 +453,8 @@ function figure(widthPx: number, heightPx: number): string {
   return `<p><img src="a.png" alt="" width="${widthPx}" height="${heightPx}"></p>`
 }
 
-function near(actual: number, expected: number): void {
-  assert.ok(Math.abs(actual - expected) < 0.001, `${actual} !== ${expected}`)
+function near(actual: number, expected: number, label = ''): void {
+  assert.ok(Math.abs(actual - expected) < 0.001, `${label}${actual} !== ${expected}`)
 }
 
 // 画像は実寸（`<img>` の width / height、measure-images.ts が書き入れます）から
