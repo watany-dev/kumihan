@@ -103,8 +103,13 @@ class RecordingResponse {
     return this
   }
 
+  write(chunk: Uint8Array | string): this {
+    this.body += typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk)
+    return this
+  }
+
   end(chunk?: Buffer | string): this {
-    if (chunk !== undefined) this.body = chunk.toString()
+    if (chunk !== undefined) this.write(chunk)
     return this
   }
 }

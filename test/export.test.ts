@@ -194,6 +194,34 @@ describe('writeExport', () => {
     }
   })
 
+  it('skips an image whose reference is broken percent-encoding', async () => {
+    // 名前に生の `%` を含む画像は、URL 符号化として壊れていることがあります
+    // （`a%zz.png` など）。出力先のパスへ戻せないので、その画像だけ諦めて
+    // 書き出し自体は続けます。
+    const dir = await mkdtemp(join(tmpdir(), 'kumihan-export-percent-'))
+    const logged: string[] = []
+    const original = console.error
+    console.error = (...args: unknown[]) => {
+      logged.push(args.map(String).join(' '))
+    }
+    try {
+      await writeFile(join(dir, 'a%zz.png'), PNG)
+      const source = join(dir, 'index.md')
+      await writeFile(source, '![x](a%zz.png)\n')
+      const out = join(dir, 'out')
+      const written = await writeExport(source, out)
+      assert.ok(written.some((path) => path.endsWith('index.html')))
+      assert.equal(
+        written.some((path) => path.endsWith('.png')),
+        false,
+      )
+      assert.ok(logged.some((line) => line.includes('画像の出力先が不正です')))
+    } finally {
+      console.error = original
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
   it('exports markdown handed in directly, resolving images from the given root', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'kumihan-export-stdin-'))
     try {

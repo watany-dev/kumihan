@@ -1,6 +1,10 @@
 import { secureHeaders } from 'hono/secure-headers'
 
-const CONTENT_SECURITY_POLICY = [
+// CSP は 2 通りあります。プレビューは自動リロード用のスクリプト 1 本と
+// EventSource を使うので `script-src 'self'` / `connect-src 'self'`、
+// export した静的 HTML はスクリプトを含まないので `'none'` のままです。
+// インライン・属性のスクリプトはどちらも通しません。
+const EXPORT_CSP = [
   "default-src 'none'",
   "base-uri 'none'",
   "form-action 'none'",
@@ -17,19 +21,32 @@ const CONTENT_SECURITY_POLICY = [
   "manifest-src 'none'",
 ].join('; ')
 
-// frame-ancestors is ignored in <meta>; keep it on the HTTP header only.
-export const DOCUMENT_CONTENT_SECURITY_POLICY = CONTENT_SECURITY_POLICY.split('; ')
-  .filter((directive) => !directive.startsWith('frame-ancestors'))
-  .join('; ')
+const PREVIEW_CSP = EXPORT_CSP.replace("script-src 'none'", "script-src 'self'").replace(
+  "connect-src 'none'",
+  "connect-src 'self'",
+)
 
 const REFERRER_POLICY = 'no-referrer'
 
-// 内容は定数なので、リクエストごとに組み立て直さない。
-const DOCUMENT_SECURITY_META = `  <meta http-equiv="Content-Security-Policy" content="${DOCUMENT_CONTENT_SECURITY_POLICY}">
-  <meta name="referrer" content="${REFERRER_POLICY}">`
+// frame-ancestors is ignored in <meta>; keep it on the HTTP header only.
+function metaCsp(policy: string): string {
+  return policy
+    .split('; ')
+    .filter((directive) => !directive.startsWith('frame-ancestors'))
+    .join('; ')
+}
 
-export function documentSecurityMeta(): string {
-  return DOCUMENT_SECURITY_META
+// 内容は定数なので、リクエストごとに組み立て直さない。
+const EXPORT_SECURITY_META = securityMeta(metaCsp(EXPORT_CSP))
+const PREVIEW_SECURITY_META = securityMeta(metaCsp(PREVIEW_CSP))
+
+function securityMeta(policy: string): string {
+  return `  <meta http-equiv="Content-Security-Policy" content="${policy}">
+  <meta name="referrer" content="${REFERRER_POLICY}">`
+}
+
+export function documentSecurityMeta(context: 'export' | 'preview' = 'export'): string {
+  return context === 'preview' ? PREVIEW_SECURITY_META : EXPORT_SECURITY_META
 }
 
 export function previewSecureHeaders() {
@@ -39,12 +56,12 @@ export function previewSecureHeaders() {
       baseUri: ["'none'"],
       formAction: ["'none'"],
       frameAncestors: ["'none'"],
-      scriptSrc: ["'none'"],
+      scriptSrc: ["'self'"],
       scriptSrcAttr: ["'none'"],
       styleSrc: ["'self'"],
       imgSrc: ["'self'", 'https:', 'http:'],
       fontSrc: ["'none'"],
-      connectSrc: ["'none'"],
+      connectSrc: ["'self'"],
       objectSrc: ["'none'"],
       mediaSrc: ["'none'"],
       workerSrc: ["'none'"],

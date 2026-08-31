@@ -34,6 +34,21 @@ body {
   background: #ffffff;
   color: #1a1a1a;
   box-shadow: 0 1.2mm 6mm rgba(40, 30, 20, 0.22);
+
+  /*
+   * 画面の外に出ている頁は組まない。
+   *
+   * プレビューは Refresh で頁を丸ごと作り直します。ブラウザは毎回すべての頁を
+   * 組み直すので、原稿が伸びるとリロード 1 回が秒単位になります（331KB の原稿で
+   * parse+layout に 2.3 秒。2 秒間隔のリロードが追い越されていました）。
+   *
+   * 頁は A4 と分かっているので、見えていない頁は実寸を伝えて中身の組版だけ
+   * 飛ばせます。スクロールバーの長さは変わらず、見えた時点で組まれます。
+   * contain-intrinsic-size の auto は、一度組んだ頁の実寸を覚えるという意味で、
+   * 行数の見積りがずれて 297mm を超えた頁もそのまま扱えます。
+   */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 210mm auto 297mm;
 }
 
 /*
@@ -141,7 +156,24 @@ body {
 
 .typeset img {
   max-width: 100%;
+
+  /*
+   * 実寸は img の width / height 属性で渡します（measure-images.ts）。属性は
+   * 幅と高さの指定でもあるので、auto に戻して縦横比だけを使わせます。戻さないと
+   * 幅が実寸のまま決まり、max-height で高さだけ切り詰められた図がゆがみます。
+   */
+  width: auto;
   height: auto;
+
+  /*
+   * 図の高さは段 1 本まで。原稿に対して実寸で組む必要はないので、大きな写真は
+   * ここまで縮めます（縦横比はそのまま）。段落の下の余白（0.9em）を引いてある
+   * ので、図だけの段落は余白を足しても段 1 本にちょうど収まります。
+   *
+   * 頁分け（paginate.ts の imageMaxLines）はこの高さで見積もります。両者が
+   * ずれると図のある頁があふれるので、test/paginate.test.ts が一致を見ます。
+   */
+  max-height: calc(35 * 1.9em - 0.9em);
 }
 
 .typeset blockquote {
@@ -232,8 +264,27 @@ body {
   column-rule: 0.3pt solid #d0cdc6;
   font-size: 9.5pt;
   line-height: 1.75;
-  height: calc(40 * 1.75em);
   column-fill: balance;
+
+  /*
+   * 段の高さは 40 行。頁分け（paginate.ts）はこの高さの 2 段ぶんに詰めます。
+   *
+   * height ではなく min-height なのは、詰めすぎた頁を紙の外へ流さないためです。
+   * 高さの決まった段組みは、入りきらない中身を段の右外に「あふれ段」として
+   * 並べます。紙にはみ出した段はビューポートの端で切れ、表は 1 文字ずつに
+   * 潰れて、原稿が壊れたように見えていました。
+   *
+   * 組み上がりの高さは組んでみるまで分からないので（折り返しは書体で変わり、
+   * 画像は実寸を読んでも小数の丸めが残ります）、見積りはいつか外れます。
+   * min-height なら、あふれた頁はその頁が縦に伸びるだけで済みます。紙が
+   * 1 枚だけ長くなるのは目で見て分かり、中身は読めるまま残ります。
+   */
+  min-height: calc(40 * 1.75em);
+}
+
+/* 2段組は段が低いので、図の上限もそのぶん下がります。 */
+.typeset.cols-2 img {
+  max-height: calc(40 * 1.75em - 0.9em);
 }
 
 .typeset.cols-2 h1,
@@ -302,6 +353,9 @@ body {
     width: 210mm;
     min-height: 297mm;
     break-after: page;
+
+    /* 紙に出すときは全頁を組む（画面外を飛ばす最適化を打ち消す）。 */
+    content-visibility: visible;
   }
 
   .paper:last-of-type {

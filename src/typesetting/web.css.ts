@@ -111,6 +111,22 @@ body.web {
   font-kerning: normal;
 }
 
+/*
+ * 画面の外に出ているブロックは組まない。
+ *
+ * 組版と 2段は頁が A4 と分かっているので .paper ごとに飛ばせますが、Web 記事は
+ * 一続きなので、段落や見出しの単位で飛ばします。高さは原稿しだいなので 3rem を
+ * 目安に置き、一度組んだブロックは実寸を覚えます（contain-intrinsic-size の auto）。
+ *
+ * 目安がずれるとスクロールバーの長さがずれます。3rem は実測で選びました。
+ * 8rem まで伸ばすと文書の高さが実寸の 2 倍になり、リロードで戻る位置が
+ * 20 ブロックほど狂います。
+ */
+.article > * {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 3rem;
+}
+
 .article h1,
 .article h2,
 .article h3 {
@@ -166,6 +182,8 @@ body.web {
 
 .article img {
   max-width: 100%;
+  /* 実寸の属性（measure-images.ts）は縦横比のためだけに使います。 */
+  width: auto;
   height: auto;
 }
 

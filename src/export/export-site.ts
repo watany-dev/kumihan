@@ -8,52 +8,60 @@ export interface StaticAsset {
   response: Response
 }
 
-export function exportSite(markdown: string, options?: RenderDocumentOptions): StaticAsset[] {
-  const fragment = renderMarkdown(markdown)
-  const printHtml = renderDocument(fragment, { ...options, mode: 'print' })
-  const magazineHtml = renderDocument(fragment, { ...options, mode: 'magazine' })
-  const webHtml = renderDocument(fragment, { ...options, mode: 'web' })
+/** 書き出す 1 ファイル。本文は文字列のまま持ちます。 */
+export interface ExportFile {
+  pathname: string
+  body: string
+  contentType: string
+}
 
+const HTML_TYPE = 'text/html; charset=utf-8'
+const CSS_TYPE = 'text/css; charset=utf-8'
+
+/**
+ * 変換済みの断片（renderMarkdown の結果）から、書き出す一式を作ります。
+ *
+ * 断片を受け取るのは、呼び出し側が断片を他の用途（writeExport の画像収集）
+ * にも使うためです。Markdown の変換は書き出し全体で最も重い段階なので、
+ * ここでもう一度やり直さないことが効きます。
+ */
+export function exportFiles(fragment: string, options?: RenderDocumentOptions): ExportFile[] {
   return [
     {
       pathname: '/index.html',
-      response: new Response(printHtml, {
-        headers: {
-          'Content-Type': 'text/html; charset=utf-8',
-        },
-      }),
+      body: renderDocument(fragment, { ...options, mode: 'print' }),
+      contentType: HTML_TYPE,
     },
     {
       pathname: '/magazine.html',
-      response: new Response(magazineHtml, {
-        headers: {
-          'Content-Type': 'text/html; charset=utf-8',
-        },
-      }),
+      body: renderDocument(fragment, { ...options, mode: 'magazine' }),
+      contentType: HTML_TYPE,
     },
     {
       pathname: '/web.html',
-      response: new Response(webHtml, {
-        headers: {
-          'Content-Type': 'text/html; charset=utf-8',
-        },
-      }),
+      body: renderDocument(fragment, { ...options, mode: 'web' }),
+      contentType: HTML_TYPE,
     },
     {
       pathname: '/assets/typeset.css',
-      response: new Response(typesetCss, {
-        headers: {
-          'Content-Type': 'text/css; charset=utf-8',
-        },
-      }),
+      body: typesetCss,
+      contentType: CSS_TYPE,
     },
     {
       pathname: '/assets/web.css',
-      response: new Response(webCss, {
-        headers: {
-          'Content-Type': 'text/css; charset=utf-8',
-        },
-      }),
+      body: webCss,
+      contentType: CSS_TYPE,
     },
   ]
+}
+
+export function exportSite(markdown: string, options?: RenderDocumentOptions): StaticAsset[] {
+  return exportFiles(renderMarkdown(markdown), options).map((file) => ({
+    pathname: file.pathname,
+    response: new Response(file.body, {
+      headers: {
+        'Content-Type': file.contentType,
+      },
+    }),
+  }))
 }

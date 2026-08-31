@@ -1,13 +1,16 @@
-import { createServer, type OutgoingHttpHeaders } from 'node:http'
+import type { OutgoingHttpHeaders, Server } from 'node:http'
 
 import type { Hono } from 'hono'
 
 import { AUTHORITY, isAllowedHost, LOOPBACK_HOST_POLICY, type HostPolicy } from './security/host.js'
 
-export function createNodeServer(
-  app: Hono,
-  hostPolicy: HostPolicy = LOOPBACK_HOST_POLICY,
-): ReturnType<typeof createServer> {
+// node:http は Node 互換レイヤの中でも初期化が重く、読み込むだけで起動が
+// 20ms ほど延びます（実測）。使うのは serve のときだけなので、モジュールの
+// import ではなくここで取り出し、export や --version が代金を払わないように
+// します。static import に戻すと、バンドラがモジュールグラフに含めてしまい
+// 起動時に評価されます。
+export function createNodeServer(app: Hono, hostPolicy: HostPolicy = LOOPBACK_HOST_POLICY): Server {
+  const { createServer } = process.getBuiltinModule('node:http')
   return createServer((req, res) => {
     void dispatchNodeRequest(req, res, async (request) => app.fetch(request), hostPolicy)
   })
@@ -101,6 +104,7 @@ export interface NodeRequestLike {
   headers: { host?: string | undefined }
   method?: string | undefined
   url?: string | undefined
+  on?(event: 'close', listener: () => void): unknown
 }
 
 export interface NodeResponseLike {
@@ -108,6 +112,7 @@ export interface NodeResponseLike {
   statusCode: number
   writeHead(status: number, headers?: OutgoingHttpHeaders): unknown
   setHeader(name: string, value: string): unknown
+  write(chunk: Uint8Array | string): unknown
   end(chunk?: Buffer | string): unknown
 }
 
@@ -141,7 +146,27 @@ export async function dispatchNodeRequest(
     const target = safeRequestTarget(req.url)
     const response = await fetchImpl(new Request(`http://${host}${target}`, { method }))
     res.writeHead(response.status, Object.fromEntries(response.headers))
-    res.end(Buffer.from(await response.arrayBuffer()))
+    const body = response.body
+    if (body === null) {
+      res.end()
+      return
+    }
+    // 応答は貯めてから書くのではなく、届いたそばから流します。/events の
+    // SSE は終わらない応答なので、貯める方式では永遠に送信が始まりません。
+    // クライアントが去ったら読み取りを打ち切り、応答側の後始末
+    // （ReadableStream の cancel）まで伝えます。放っておくと接続ごとの
+    // 監視や心拍タイマーが残り続けます。切断は req の 'close' で知ります。
+    // res の 'close' は Node では届きますが、Bun では届きません（実測）。
+    const reader = body.getReader()
+    req.on?.('close', () => {
+      reader.cancel().catch(() => {})
+    })
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      res.write(value)
+    }
+    res.end()
   } catch (error) {
     console.error('[kumihan] Unexpected server error:', error)
     if (!res.headersSent) {
