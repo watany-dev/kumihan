@@ -77,6 +77,8 @@ const app = createPreviewApp({
 })
 ```
 
+画像は組む前に実寸を読みます。`withImageSizes(fragment, root)`（`src/typesetting/measure-images.ts`）が、原稿からの相対パスで見つかった画像の縦横を先頭のバイト列から読み（`src/typesetting/image-size.ts`）、断片の `<img>` に `width` / `height` として書き入れます。頁分け（`paginate.ts`）はこれを見て図の高さを本文行に換算し、ブラウザは読み込む前に図の場所を空けられます。読めなかった画像や外部の URL は属性が付かず、従来どおり 1 行として数えます。`exportSite(markdown)` は原稿の場所を持たないので実寸を読みません（`writeExport` とプレビューは読みます）。
+
 変換済みの断片を他の用途にも使うときは、`exportFiles(fragment)` に断片を渡すと Markdown の変換をやり直さずに書き出す一式（`pathname`・`body`・`contentType`）が得られます。`writeExport` はこの形で、変換 1 回の結果を HTML の組み立てと画像の収集の両方に使っています。
 
 原稿の取り出し方は `src/manuscript.ts` の `Manuscript`（`root`・`read()`・任意の `watch()`）にまとめてあります。`watch` はファイル原稿だけが持ち、プレビューの `/events` が購読中にだけ使います。`createPreviewApp` と `writeExport` はパスの文字列も `Manuscript` も受け取ります。標準入力のように元ファイルが無い原稿は `memoryManuscript` で包み、画像の基準ディレクトリを明示します。

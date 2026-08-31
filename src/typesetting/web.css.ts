@@ -182,6 +182,8 @@ body.web {
 
 .article img {
   max-width: 100%;
+  /* 実寸の属性（measure-images.ts）は縦横比のためだけに使います。 */
+  width: auto;
   height: auto;
 }
 

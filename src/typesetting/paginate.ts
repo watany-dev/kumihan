@@ -15,6 +15,10 @@ export interface PageLayout {
   readonly bodyPoints: number
   /** 本文の行送り（font-size に対する倍率）。 */
   readonly lineHeight: number
+  /** 版面の幅（mm）。段抜きの図はここまで広がる。 */
+  readonly textWidthMm: number
+  /** 段 1 本の幅（mm）。段の中に組まれる図はここまで。 */
+  readonly columnWidthMm: number
 }
 
 const MM_PER_POINT = 0.352778
@@ -38,6 +42,8 @@ const MAGAZINE_POINTS = 9.5
 const MAGAZINE_LINE_HEIGHT = 1.75
 const MAGAZINE_COLUMNS = 2
 const MAGAZINE_GAP_MM = 8
+const MAGAZINE_COLUMN_WIDTH_MM =
+  (TEXT_WIDTH_MM - MAGAZINE_GAP_MM * (MAGAZINE_COLUMNS - 1)) / MAGAZINE_COLUMNS
 /** 2段組の段 1 本の高さ（行）。typeset.css の min-height と同じ値。 */
 export const MAGAZINE_COLUMN_LINES = 40
 
@@ -60,6 +66,8 @@ export const PRINT_LAYOUT: PageLayout = {
   columns: 1,
   bodyPoints: PRINT_POINTS,
   lineHeight: PRINT_LINE_HEIGHT,
+  textWidthMm: TEXT_WIDTH_MM,
+  columnWidthMm: TEXT_WIDTH_MM,
 }
 
 /**
@@ -68,13 +76,12 @@ export const PRINT_LAYOUT: PageLayout = {
  */
 export const MAGAZINE_LAYOUT: PageLayout = {
   lines: MAGAZINE_COLUMN_LINES * MAGAZINE_COLUMNS,
-  columnChars: columnChars(
-    (TEXT_WIDTH_MM - MAGAZINE_GAP_MM * (MAGAZINE_COLUMNS - 1)) / MAGAZINE_COLUMNS,
-    MAGAZINE_POINTS,
-  ),
+  columnChars: columnChars(MAGAZINE_COLUMN_WIDTH_MM, MAGAZINE_POINTS),
   columns: MAGAZINE_COLUMNS,
   bodyPoints: MAGAZINE_POINTS,
   lineHeight: MAGAZINE_LINE_HEIGHT,
+  textWidthMm: TEXT_WIDTH_MM,
+  columnWidthMm: MAGAZINE_COLUMN_WIDTH_MM,
 }
 
 // 同じ断片は組版と 2段の両方が頁分けします。書き出しは必ず両方を作り、
@@ -335,8 +342,10 @@ const REGION_PRECISION = 0.01
 // 字送りは書体で変わるので、これは見当です。見当が外れても紙が壊れないよう、
 // typeset.css は段の高さを min-height で持ち、あふれた頁は横に流さず縦に伸ばします。
 //
-// 画像だけは組み上がりの高さが分かりません（原寸を読まないと決まらない）。
-// 従来どおり 1 行として数えるので、大きな図のある頁は縦に伸びます。
+// 画像は実寸から見積もります。断片の `<img>` に width / height が入っていれば
+// （`measure-images.ts` が原稿の画像ファイルから読んで書き入れます）、CSS の
+// max-width / max-height で縮んだあとの高さを本文行に直します。寸法の分からない
+// 画像 —— 外部の URL や、読めなかったファイル —— は従来どおり 1 行と数えます。
 
 /** 半角 1 字を 1 とする幅の単位。全角はこの 2 つぶん。 */
 const HALF = 1
@@ -484,10 +493,101 @@ export function blockLines(block: string, layout: PageLayout): number {
   )
 
   const counted = tag === 'table' ? tableRuns(block, capacity) : textRuns(block, capacity)
-  const height = metrics.lead + counted.lines * metrics.lineRatio + counted.runs * metrics.runLead
+  const height =
+    metrics.lead +
+    counted.lines * metrics.lineRatio +
+    counted.runs * metrics.runLead +
+    imageExtraLines(block, layout)
 
   // 何も組まれないブロックでも、詰め込みが進むよう 1 行は取ります。
   return height > 0 ? height : 1
+}
+
+// ===== 画像 =====
+//
+// 画像の実寸は CSS ピクセルで、1px は 1/96 インチです。原稿に対して原寸で
+// 組む必要はないので、typeset.css は幅を版面（または段）まで、高さを段 1 本
+// までに抑えます。大きな写真はそこまで縮み、小さな図はそのままの大きさです。
+const MM_PER_PIXEL = 25.4 / 96
+
+/** 本文 1 行の高さ（mm）。 */
+function lineMm(layout: PageLayout): number {
+  return layout.bodyPoints * layout.lineHeight * MM_PER_POINT
+}
+
+/**
+ * typeset.css の `img { max-height }` にあたる高さ（本文行）。
+ *
+ * 段 1 本から段落の下の余白を引いた高さです。ここまで縮めておけば、図だけの
+ * 段落は余白を足しても段 1 本にちょうど収まり、頁からはみ出しません。
+ */
+export function imageMaxLines(layout: PageLayout): number {
+  return layout.lines / layout.columns - PARAGRAPH_MARGIN_EM / layout.lineHeight
+}
+
+/**
+ * ブロックの中の画像が、地の文として数えた 1 行より高いぶん（本文行）。
+ *
+ * 画像は `<img>` 1 つで 1 行ぶん数えられているので、その差だけを足します。
+ * 寸法の無い画像は 0 です（従来どおり 1 行のまま）。
+ */
+function imageExtraLines(block: string, layout: PageLayout): number {
+  let start = block.indexOf('<img')
+  if (start === -1) {
+    return 0
+  }
+
+  // 2段組で段を抜く図（図だけの段落）は版面いっぱいまで、それ以外は段の幅まで。
+  const widthMm =
+    layout.columns > 1 && isImageParagraph(block) ? layout.textWidthMm : layout.columnWidthMm
+
+  let extra = 0
+  while (start !== -1) {
+    const end = block.indexOf('>', start)
+    if (end === -1) {
+      break
+    }
+    const lines = imageLines(block.slice(start, end + 1), widthMm, layout)
+    if (lines > 1) {
+      extra += lines - 1
+    }
+    start = block.indexOf('<img', end + 1)
+  }
+  return extra
+}
+
+/**
+ * `<img>` 1 つの組み上がりの高さ（本文行）。寸法が読めなければ 1 行。
+ *
+ * 幅が入る場所を超えていれば縦横比のまま縮め（`max-width: 100%`）、それでも
+ * 段より高ければ高さで抑えます（`max-height`）。
+ */
+function imageLines(tag: string, widthMm: number, layout: PageLayout): number {
+  const width = attributeNumber(tag, ' width="')
+  const height = attributeNumber(tag, ' height="')
+  if (width <= 0 || height <= 0) {
+    return 1
+  }
+
+  const drawnMm = Math.min(width * MM_PER_PIXEL, widthMm)
+  const lines = (drawnMm * height) / width / lineMm(layout)
+  const max = imageMaxLines(layout)
+  return lines > max ? max : lines
+}
+
+/** タグの属性の数。` width="1200"` のように、名前は前後まで含めて渡します。 */
+function attributeNumber(tag: string, name: string): number {
+  const start = tag.indexOf(name)
+  if (start === -1) {
+    return 0
+  }
+  const from = start + name.length
+  const end = tag.indexOf('"', from)
+  if (end === -1) {
+    return 0
+  }
+  const value = Number(tag.slice(from, end))
+  return Number.isFinite(value) ? value : 0
 }
 
 // ブロックが段をどう流れるか。
@@ -569,7 +669,8 @@ function textRuns(html: string, capacity: number): Counted {
         width = 0
         visible = false
       } else if (isTag(html, i + 1, 'hr') || isTag(html, i + 1, 'img')) {
-        // 高さは分からないので、1 行あるものとして扱う。
+        // どちらもその行に何か組まれる。画像が 1 行より高いぶんは、
+        // 幅も高さも分かってはじめて出るので imageExtraLines が足します。
         visible = true
       }
       continue

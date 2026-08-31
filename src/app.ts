@@ -7,6 +7,7 @@ import { toManuscript, type ManuscriptSource } from './manuscript.js'
 import { renderMarkdown } from './markdown/render.js'
 import { reloadJs } from './reload.js.js'
 import { documentSecurityMeta, previewSecureHeaders } from './security/headers.js'
+import { withImageSizes } from './typesetting/measure-images.js'
 import { renderDocument, type PreviewMode } from './typesetting/render-page.js'
 import { typesetCss } from './typesetting/typeset.css.js'
 import { webCss } from './typesetting/web.css.js'
@@ -81,10 +82,15 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
 
   async function prime(markdown: string): Promise<void> {
     if (markdown === cachedMarkdown) return
+    // 画像の実寸は原稿の画像ファイルから読みます（頁分けの見積りに要ります）。
+    // ハッシュと同時に走らせるので、原稿 1 本ぶんの待ちはどちらか長いほうだけです。
     // await 明けに別のリクエストが同じ内容で先着していても、結果は同じ。
-    const version = await versionOf(markdown)
+    const [version, fragment] = await Promise.all([
+      versionOf(markdown),
+      withImageSizes(renderMarkdown(markdown), manuscript.root),
+    ])
     cachedMarkdown = markdown
-    cachedFragment = renderMarkdown(markdown)
+    cachedFragment = fragment
     cachedVersion = version
     cachedDocuments.clear()
   }
