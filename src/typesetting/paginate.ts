@@ -6,13 +6,38 @@ export const MAGAZINE_LINES_PER_PAGE = 40
  */
 export const PRINT_LINES_PER_PAGE = 24
 
+// 同じ断片は組版（24 行）と 2段（40 行）の両方が頁分けします。書き出しは
+// 必ず両方を作り、プレビューもモードを切り替えるたびに同じ断片で来ます。
+// ブロック分割と行数えは断片全体の走査なので、直前の結果をひとつだけ覚えて
+// 2 回目からは頁への詰め込み（ブロック数に比例）だけで済ませます。
+// 比較は同一の文字列オブジェクトなら一瞬で、たまたま別オブジェクトでも
+// 走査 1 回ぶんより高くつきません。
+let cachedHtml: string | null = null
+let cachedBlocks: string[] = []
+let cachedCounts: number[] = []
+
+function blocksOf(html: string): { blocks: string[]; counts: number[] } {
+  if (html === cachedHtml) {
+    return { blocks: cachedBlocks, counts: cachedCounts }
+  }
+  const blocks = splitBlocks(html)
+  const counts: number[] = []
+  for (const block of blocks) {
+    counts.push(lineCount(block))
+  }
+  cachedHtml = html
+  cachedBlocks = blocks
+  cachedCounts = counts
+  return { blocks, counts }
+}
+
 /**
  * HTML 断片の改行数で頁に詰める。ブロックの途中では切らない。
  *
  * ponytail: 折り返しや段の高さは見ない。視覚行がずれたら estimate を足す。
  */
 export function paginate(html: string, linesPerPage: number): string[] {
-  const blocks = splitBlocks(html)
+  const { blocks, counts } = blocksOf(html)
   if (blocks.length === 0) {
     return ['']
   }
@@ -24,8 +49,9 @@ export function paginate(html: string, linesPerPage: number): string[] {
   let empty = true
   let used = 0
 
-  for (const block of blocks) {
-    const lines = lineCount(block)
+  for (let index = 0; index < blocks.length; index += 1) {
+    const block = blocks[index] ?? ''
+    const lines = counts[index] ?? 1
     if (!empty && used + lines > linesPerPage) {
       pages.push(current)
       current = ''
