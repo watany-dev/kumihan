@@ -100,6 +100,8 @@ bun run bench:memory -- --scale 2000
 
 `content/index.md` を `--scale` 倍した原稿で、`escapeHtml` / `renderInline` / `renderMarkdown` / `renderDocument` の中央値・最小値・スループットを出します。JIT が温まってから計測します。`--json` で機械可読な出力になります。
 
+`renderMarkdown` は 3 つの経路を分けて測ります。cold は初回変換（原稿全体の変換）、reload は無変更の原稿の変換し直し、1 edit は 1 ブロックだけ編集した原稿の変換し直しです。変換は前回の原稿との差分だけをやり直すので（`src/markdown/render.ts` の増分変換）、reload と 1 edit は原稿が大きいほど cold より桁で速くなります。
+
 ## CI とリリース
 
 `main` への push と PR で `vp check`、knip、カバレッジ付きテスト、export、バイナリの smoke test、`actionlint`、`zizmor` が走ります。セキュリティ用ワークフローは Semgrep、Gitleaks、`bun audit` を weekly でも回します。

@@ -11,7 +11,7 @@ import { parseArgs } from 'node:util'
 
 import { escapeHtml, sanitizeUrl } from '../src/markdown/escape.js'
 import { renderInline } from '../src/markdown/inline.js'
-import { renderMarkdown } from '../src/markdown/render.js'
+import { renderMarkdown, resetRenderCache } from '../src/markdown/render.js'
 import { renderDocument } from '../src/typesetting/render-page.js'
 
 const { values } = parseArgs({
@@ -47,7 +47,37 @@ const cases: Case[] = [
   { name: 'sanitizeUrl', bytes: 0, run: () => sanitizeUrl('https://example.com/path?a=1') },
   { name: 'renderInline (plain)', bytes: plainInline.length, run: () => renderInline(plainInline) },
   { name: 'renderInline (rich)', bytes: inlineRich.length, run: () => renderInline(inlineRich) },
-  { name: 'renderMarkdown', bytes: manuscript.length, run: () => renderMarkdown(manuscript) },
+  {
+    name: 'renderMarkdown (cold)',
+    bytes: manuscript.length,
+    run: () => {
+      // 増分キャッシュを忘れさせ、初回変換（原稿全体の変換）を測る。
+      resetRenderCache()
+      return renderMarkdown(manuscript)
+    },
+  },
+  {
+    name: 'renderMarkdown (reload)',
+    bytes: manuscript.length,
+    // 同じ原稿の変換し直し（別タブやモード切り替えが取りに来る経路）。
+    run: () => renderMarkdown(manuscript),
+  },
+  {
+    name: 'renderMarkdown (1 edit)',
+    bytes: manuscript.length,
+    // 保存のたびの変換し直し。原稿の真ん中に毎回違う段落を 1 つ差し込み、
+    // 「1 ブロックだけ変わった原稿」を作ってから変換する。
+    run: (() => {
+      const mid = manuscript.indexOf('\n\n', manuscript.length >> 1) + 2
+      const head = manuscript.slice(0, mid)
+      const tail = manuscript.slice(mid)
+      let edit = 0
+      return () => {
+        edit += 1
+        return renderMarkdown(`${head}編集された段落 ${edit}。\n\n${tail}`)
+      }
+    })(),
+  },
   // 組版と 2段は頁分け（paginate）を通ります。Web だけを測っていたころは、
   // 既定の `/` が通る経路がベンチにまったく出てこず、そこにあった二乗時間に
   // 気づけませんでした。断片は測る前に作っておき、頁分けだけを見ます。
