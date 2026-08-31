@@ -419,17 +419,92 @@ describe('block heights match the stylesheet', () => {
     assert.ok(separate > paper, `${separate} <= ${paper}`)
     assert.equal(paginate(blocks.join('\n'), sized(paper)).length, 1)
   })
+})
+
+// 頁を切っているのは CSS ではなく paginate なので、`break-after: avoid` も
+// `widows` / `orphans` も、紙に分けたあとでは働く余地がありません。泣き別れは
+// 紙を確定させる前に直します。
+describe('widows and orphans', () => {
+  /** 見出しのあとに置く、続きぐあいの違うブロック。 */
+  const following = [
+    paragraphs(6),
+    // 1 行では済まない段落。見出しの直後に取る 1 行の空きには入りません。
+    fullWidth(400),
+    '| a | b |\n| --- | --- |\n| 1 | 2 |\n| 3 | 4 |',
+    ['```', 'first', 'second', 'third', '```'].join('\n'),
+    '> 引用です。\n>\n> 続きです。',
+  ]
 
   it('never leaves a heading at the foot of the paper', () => {
     // 見出しは `break-after: avoid`。紙の下端に残ると、次の紙に本文だけが出ます。
+    //
+    // 直後に 1 行ぶんの空きを取るだけでは足りません。続くのが 1 行では済まない
+    // ブロック——長い段落、表、コード——なら、そのブロックだけが次の紙へ回り、
+    // 見出しが取り残されます。見出しごと送ります。
     for (const layout of [PRINT_LAYOUT, MAGAZINE_LAYOUT]) {
-      for (let before = 1; before <= 40; before += 1) {
-        const source = `${paragraphs(before)}\n\n## 節\n\n${paragraphs(6)}`
-        for (const page of paginate(renderMarkdown(source), layout)) {
-          assert.equal(page.trimEnd().endsWith('</h2>'), false, `${before}`)
+      for (const after of following) {
+        for (let before = 1; before <= 40; before += 1) {
+          const source = `${paragraphs(before)}\n\n## 節\n\n${after}`
+          for (const page of paginate(renderMarkdown(source), layout)) {
+            assert.doesNotMatch(page.trimEnd(), /<\/h[1-3]>$/, `${before} / ${after.slice(0, 8)}`)
+          }
         }
       }
     }
+  })
+
+  it('never leaves a spanning heading at the foot of the paper', () => {
+    // 2段組の h1 は `column-span: all`。段抜きは段組みを区切るだけで、直後の
+    // 1 行を連れる約束は見ていませんでした。
+    for (const after of following) {
+      for (let before = 1; before <= 60; before += 1) {
+        const source = `${paragraphs(before)}\n\n# 章\n\n${after}`
+        for (const page of paginate(renderMarkdown(source), MAGAZINE_LAYOUT)) {
+          assert.doesNotMatch(page.trimEnd(), /<\/h1>$/, `${before} / ${after.slice(0, 8)}`)
+        }
+      }
+    }
+  })
+
+  it('does not empty a paper by sending headings on', () => {
+    // 見出しが続けばまとめて送ります。送りが連鎖しても紙は空にしません。
+    for (const layout of [PRINT_LAYOUT, MAGAZINE_LAYOUT]) {
+      for (let before = 1; before <= 40; before += 1) {
+        const source = `${paragraphs(before)}\n\n# 章\n\n## 節\n\n### 項\n\n${fullWidth(600)}`
+        const pages = paginate(renderMarkdown(source), layout)
+        for (const page of pages) {
+          assert.notEqual(page.trim(), '', `${before}`)
+        }
+        // 送っても中身は落ちません。
+        const all = pages.join('\n')
+        assert.equal((all.match(/<h[1-3]>/g) ?? []).length, 3, `${before}`)
+        assert.equal((all.match(/<p>/g) ?? []).length, before + 1, `${before}`)
+      }
+    }
+  })
+
+  it('keeps a heading that ends the manuscript on the last paper', () => {
+    // 送り先の紙がありません。送れば見出しだけの紙が 1 枚増えるだけです。
+    const pages = paginate(renderMarkdown(`${paragraphs(120)}\n\n## 終わりの節`), PRINT_LAYOUT)
+    assert.match(pages.at(-1) ?? '', /<h2>終わりの節<\/h2>$/)
+  })
+
+  it('never splits a paragraph across two papers', () => {
+    // 段落の最後の 1 行だけが次の紙へ飛ぶことはありません。paginate はブロックの
+    // 途中で切らないので、段落は必ずひとつの紙に収まります。紙の中の段の
+    // 変わり目は、CSS の `widows` / `orphans` がブラウザに守らせます。
+    const source = renderMarkdown(
+      Array.from({ length: 30 }, (_, i) => `${fullWidth(200)}${i}`).join('\n\n'),
+    )
+    for (const layout of [PRINT_LAYOUT, MAGAZINE_LAYOUT]) {
+      const pages = paginate(source, layout)
+      assert.ok(pages.length > 1)
+      for (const page of pages) {
+        assert.equal((page.match(/<p>/g) ?? []).length, (page.match(/<\/p>/g) ?? []).length)
+      }
+    }
+    assert.equal(declaration('.typeset p', 'widows'), '2')
+    assert.equal(declaration('.typeset p', 'orphans'), '2')
   })
 })
 
