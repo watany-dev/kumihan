@@ -25,6 +25,7 @@ GitHub Codespaces と Dev Container は Bun と Vite+ を入れ、`vp install --
 | `bun run bench`            | 組版パイプラインの処理時間を測る                            |
 | `bun run bench:latency`    | 保存からプレビュー反映までの遅れと、無変更時の転送量を測る  |
 | `bun run bench:size`       | バンドルサイズとモジュール内訳を測る                        |
+| `bun run bench:startup`    | 実行ファイルの起動時間を測る                                |
 | `bun run bench:memory`     | 変換段階ごとの RSS ピークを測る                             |
 | `bun audit`                | 依存関係の脆弱性を検査する                                  |
 
@@ -94,9 +95,12 @@ bun run bench                          # 既定は 50 回 × 40 倍の原稿
 bun run bench -- --iterations 300 --scale 100
 bun run bench:size                     # バンドルの生 / minify / gzip とモジュール内訳
 bun run bench:size -- --binary         # スタンドアロン実行ファイルのサイズも測る
+bun run bench:startup                  # dist-bin の実行ファイルを繰り返し起動して測る
 bun run bench:memory                   # 既定は 400 倍の原稿
 bun run bench:memory -- --scale 2000
 ```
+
+`bench:startup` は先に `bun run compile` が要ります。組版ではなく、ランタイムとモジュールの読み込みにかかる時間を見るためのものです。ここが伸びると、原稿の大きさに関係なく毎回の実行が遅くなります。`node:http` と `node:fs` は読み込むだけで合わせて 30ms ほどかかるので、実際に使うところ（`serve` と保存の監視）で `process.getBuiltinModule` から取り出しています。
 
 `content/index.md` を `--scale` 倍した原稿で、`escapeHtml` / `renderInline` / `renderMarkdown` / `renderDocument` の中央値・最小値・スループットを出します。JIT が温まってから計測します。`--json` で機械可読な出力になります。
 

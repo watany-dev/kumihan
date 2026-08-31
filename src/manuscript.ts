@@ -1,4 +1,3 @@
-import { watch } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { basename, dirname, resolve } from 'node:path'
 
@@ -52,6 +51,11 @@ export function toManuscript(source: ManuscriptSource): Manuscript {
 function watchManuscriptFile(file: string, onChange: () => void): () => void {
   const name = basename(file)
   try {
+    // node:fs は読み込むだけで起動が 10ms ほど延びます（実測）。監視が要るのは
+    // プレビューの /events に購読者がいるあいだだけなので、モジュールの import
+    // ではなくここで取り出します。同期に取れるので、下の catch（fs.watch が
+    // 使えないファイルシステム）も戻り値の同期契約もそのままです。
+    const { watch } = process.getBuiltinModule('node:fs')
     const watcher = watch(dirname(file), (_event, filename) => {
       // filename が取れない環境もあるので、そのときは読み直しに倒します。
       if (filename === null || filename === name) onChange()
