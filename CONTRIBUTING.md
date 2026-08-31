@@ -76,6 +76,8 @@ const app = createPreviewApp({
 })
 ```
 
+変換済みの断片を他の用途にも使うときは、`exportFiles(fragment)` に断片を渡すと Markdown の変換をやり直さずに書き出す一式（`pathname`・`body`・`contentType`）が得られます。`writeExport` はこの形で、変換 1 回の結果を HTML の組み立てと画像の収集の両方に使っています。
+
 原稿の取り出し方は `src/manuscript.ts` の `Manuscript`（`root`・`read()`・任意の `watch()`）にまとめてあります。`watch` はファイル原稿だけが持ち、プレビューの `/events` が購読中にだけ使います。`createPreviewApp` と `writeExport` はパスの文字列も `Manuscript` も受け取ります。標準入力のように元ファイルが無い原稿は `memoryManuscript` で包み、画像の基準ディレクトリを明示します。
 
 ```ts

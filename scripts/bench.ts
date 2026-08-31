@@ -9,6 +9,7 @@
 import { readFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 
+import { exportSite } from '../src/export/export-site.js'
 import { escapeHtml, sanitizeUrl } from '../src/markdown/escape.js'
 import { renderInline } from '../src/markdown/inline.js'
 import { renderMarkdown } from '../src/markdown/render.js'
@@ -70,6 +71,14 @@ const cases: Case[] = [
     name: 'markdown + print',
     bytes: manuscript.length,
     run: () => renderDocument(renderMarkdown(manuscript), { mode: 'print' }),
+  },
+  // 書き出しの変換部分をまとめて測ります（ファイル書き込みは含みません）。
+  // 3 つのモードを 1 つの断片から組むので、変換 1 回 + 文書 3 つぶんに
+  // なっているか（変換が二重に走っていないか）をここで見張ります。
+  {
+    name: 'exportSite (3 modes)',
+    bytes: manuscript.length,
+    run: () => exportSite(manuscript),
   },
 ]
 
