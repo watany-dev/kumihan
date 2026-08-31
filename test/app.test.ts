@@ -142,8 +142,9 @@ describe('preview images', () => {
       assert.match(ok.headers.get('Content-Security-Policy') ?? '', /img-src 'self' https: http:/)
       assert.deepEqual(Buffer.from(await ok.arrayBuffer()), PNG)
 
+      // 実寸（PNG は 1×1）はプレビューの `<img>` に書き入れられます。
       const html = await app.request('/')
-      assert.match(await html.text(), /<img src="a.png" alt="図">/)
+      assert.match(await html.text(), /<img src="a.png" alt="図" width="1" height="1">/)
 
       const outside = await app.request('/%2e%2e/secret.png')
       assert.equal(outside.status, 404)

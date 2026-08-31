@@ -9,6 +9,7 @@ import {
   type PageLayout,
   PRINT_LAYOUT,
   blockLines,
+  imageMaxLines,
   paginate,
 } from '../src/typesetting/paginate.js'
 import { renderDocument } from '../src/typesetting/render-page.js'
@@ -260,6 +261,104 @@ describe('block heights', () => {
   })
 })
 
+/** CSS ピクセルを mm に。1px = 1/96 インチ。 */
+function px(count: number): number {
+  return (count * 25.4) / 96
+}
+
+/** 高さ（mm）を本文行に。 */
+function rows(heightMm: number, layout: PageLayout): number {
+  return heightMm / mm(layout.bodyPoints * layout.lineHeight)
+}
+
+/** 段落の下の余白（本文行）。 */
+function margin(layout: PageLayout): number {
+  return 0.9 / layout.lineHeight
+}
+
+/** 実寸を書き入れた図だけの段落。 */
+function figure(widthPx: number, heightPx: number): string {
+  return `<p><img src="a.png" alt="" width="${widthPx}" height="${heightPx}"></p>`
+}
+
+function near(actual: number, expected: number): void {
+  assert.ok(Math.abs(actual - expected) < 0.001, `${actual} !== ${expected}`)
+}
+
+// 画像は実寸（`<img>` の width / height、measure-images.ts が書き入れます）から
+// 見積もります。原稿に対して実寸のまま組む必要はないので、版面や段より大きい図は
+// CSS が縮めます。見積りもそこまで縮んだあとの高さを数えます。
+describe('image heights', () => {
+  it('takes the height of a figure from the image itself', () => {
+    // 版面（170mm）に収まる図は実寸のまま。400×200px は 105.8×52.9mm。
+    near(
+      blockLines(figure(400, 200), PRINT_LAYOUT),
+      margin(PRINT_LAYOUT) + rows(px(200), PRINT_LAYOUT),
+    )
+    // 縦横比のぶんだけ高くなります。
+    near(
+      blockLines(figure(400, 400), PRINT_LAYOUT) - margin(PRINT_LAYOUT),
+      (blockLines(figure(400, 200), PRINT_LAYOUT) - margin(PRINT_LAYOUT)) * 2,
+    )
+  })
+
+  it('shrinks a figure wider than the page to fit it', () => {
+    // 版面より広い写真は幅いっぱいに縮みます。縦横比が同じなら、元が何倍
+    // 大きくても組み上がりは同じ高さです。
+    const expected = margin(PRINT_LAYOUT) + rows(PRINT_LAYOUT.textWidthMm / 2, PRINT_LAYOUT)
+    near(blockLines(figure(4000, 2000), PRINT_LAYOUT), expected)
+    near(blockLines(figure(8000, 4000), PRINT_LAYOUT), expected)
+  })
+
+  it('never lets a figure outgrow a column', () => {
+    for (const layout of [PRINT_LAYOUT, MAGAZINE_LAYOUT]) {
+      const tall = blockLines(figure(100, 100_000), layout)
+      near(tall, margin(layout) + imageMaxLines(layout))
+      // 余白を足しても段 1 本にちょうど収まる高さ。
+      near(tall, layout.lines / layout.columns)
+    }
+  })
+
+  it('gives a spanning figure the width of the whole page in two columns', () => {
+    // 図だけの段落は段を抜くので版面いっぱい、地の文に混ざった図は段の幅まで。
+    const spanning = blockLines(figure(1000, 500), MAGAZINE_LAYOUT)
+    const inColumn = blockLines(
+      '<p>図です。<img src="a.png" alt="" width="1000" height="500"></p>',
+      MAGAZINE_LAYOUT,
+    )
+    near(spanning, margin(MAGAZINE_LAYOUT) + rows(MAGAZINE_LAYOUT.textWidthMm / 2, MAGAZINE_LAYOUT))
+    near(
+      inColumn,
+      margin(MAGAZINE_LAYOUT) + rows(MAGAZINE_LAYOUT.columnWidthMm / 2, MAGAZINE_LAYOUT),
+    )
+    assert.ok(spanning > inColumn)
+  })
+
+  it('counts a figure of unknown size as one line, as before', () => {
+    const unknown = 1 + margin(MAGAZINE_LAYOUT)
+    assert.equal(blockLines('<p><img src="a.png" alt=""></p>', MAGAZINE_LAYOUT), unknown)
+    assert.equal(blockLines(figure(0, 0), MAGAZINE_LAYOUT), unknown)
+    assert.equal(
+      blockLines('<p><img src="a.png" alt="" width="x" height="y"></p>', MAGAZINE_LAYOUT),
+      unknown,
+    )
+    // 閉じないタグでも数え続けない。
+    assert.equal(blockLines('<p><img src="a.png"', MAGAZINE_LAYOUT), unknown)
+    // 実寸が本文 1 行より低い図は、その 1 行のまま。
+    assert.equal(blockLines(figure(8, 8), MAGAZINE_LAYOUT), unknown)
+  })
+
+  it('moves a figure that no longer fits to the next page', () => {
+    const text = renderMarkdown(paragraphs(10))
+    const small = paginate(`${text}\n${figure(200, 200)}`, PRINT_LAYOUT)
+    assert.equal(small.length, 1)
+    // 頁の高さいっぱいの図は、前の頁に残った空きには入りません。
+    const large = paginate(`${text}\n${figure(2000, 4000)}`, PRINT_LAYOUT)
+    assert.equal(large.length, 2)
+    assert.match(large[1] ?? '', /<img/)
+  })
+})
+
 // 見積りは組版指定から割り出しています。CSS だけを動かすと頁があふれるので、
 // 両者が同じ数字を見ていることを確かめます。
 describe('page layout matches the stylesheet', () => {
@@ -286,6 +385,31 @@ describe('page layout matches the stylesheet', () => {
       `calc(${MAGAZINE_COLUMN_LINES} * ${MAGAZINE_LAYOUT.lineHeight}em)`,
     )
     assert.equal(MAGAZINE_LAYOUT.lines, MAGAZINE_COLUMN_LINES * MAGAZINE_LAYOUT.columns)
+  })
+
+  it('caps a figure at the height typeset.css allows', () => {
+    // `img { max-height }` は段 1 本から段落の余白を引いた高さ。頁分けの
+    // imageMaxLines がこれとずれると、図のある頁が紙からあふれます。
+    const maxHeight = (selector: string, layout: PageLayout): number => {
+      const found = /calc\((\d+(?:\.\d+)?) \* (\d+(?:\.\d+)?)em - (\d+(?:\.\d+)?)em\)/.exec(
+        declaration(selector, 'max-height'),
+      )
+      assert.ok(found !== null, `no max-height for ${selector}`)
+      return (Number(found[1]) * Number(found[2]) - Number(found[3])) / layout.lineHeight
+    }
+
+    for (const [selector, layout] of [
+      ['.typeset img', PRINT_LAYOUT],
+      ['.typeset.cols-2 img', MAGAZINE_LAYOUT],
+    ] as const) {
+      assert.ok(Math.abs(maxHeight(selector, layout) - imageMaxLines(layout)) < 0.001)
+    }
+
+    assert.equal(declaration('.typeset img', 'max-width'), '100%')
+    // 実寸の属性が幅と高さを決めてしまわないよう、どちらも auto に戻します。
+    // width を戻し忘れると、max-height で切り詰めた図がゆがみます。
+    assert.equal(declaration('.typeset img', 'width'), 'auto')
+    assert.equal(declaration('.typeset img', 'height'), 'auto')
   })
 
   it('fits the type on the paper', () => {

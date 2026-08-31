@@ -5,6 +5,7 @@ import { contained, resolveManuscriptFile } from '../manuscript-path.js'
 import { toManuscript, type ManuscriptSource } from '../manuscript.js'
 import { unescapeHtml } from '../markdown/escape.js'
 import { renderMarkdown } from '../markdown/render.js'
+import { withImageSizes } from '../typesetting/measure-images.js'
 import { exportFiles } from './export-site.js'
 
 export async function writeExport(source: ManuscriptSource, outDir: string): Promise<string[]> {
@@ -14,7 +15,9 @@ export async function writeExport(source: ManuscriptSource, outDir: string): Pro
   // 断片は HTML の組み立てと画像の収集の両方で使うので、変換は 1 回だけに
   // します。以前は exportSite と画像の走査が別々に renderMarkdown を呼んで
   // いて、書き出しで最も重い段階が原稿全体に対して丸ごと 2 回走っていました。
-  const fragment = renderMarkdown(markdown)
+  // 画像の実寸を書き入れてから組みます。頁分けが図の高さを見積もれるように
+  // なり、書き出した HTML はブラウザが読み込む前に図の場所を空けられます。
+  const fragment = await withImageSizes(renderMarkdown(markdown), manuscript.root)
   const destRoot = resolve(outDir)
 
   // 書き出しも画像の複製も互いに独立しているので、直列に待たずまとめて実行する。
