@@ -171,6 +171,32 @@ describe('block heights', () => {
     assert.equal(height('&'.repeat(48)), 1 + PARAGRAPH_MARGIN)
   })
 
+  it('counts every East Asian wide character as a full column width', () => {
+    // 全角として組まれる符号位置は漢字と仮名だけではありません。半角と数え違えると、
+    // ハングルや全角英数、絵文字などを含む段落だけ組み上がりが半分に見積もられます。
+    const wide = [
+      'ᄀ', // U+1100 ハングル字母
+      '⺀', // U+2E80 康熙部首補助
+      'あ', // U+3041 ひらがな
+      '㐀', // U+3400 CJK 拡張 A
+      '漢', // U+4E00 CJK 統合漢字
+      'ꀀ', // U+A000 イ文字
+      '가', // U+AC00 ハングル音節
+      '𠀋', // U+2000B サロゲート対（先頭で 2 字、続きは 0 字）
+      '豈', // U+F900 CJK 互換漢字
+      '︐', // U+FE10 縦書き用の約物
+      'Ａ', // U+FF21 全角英数
+      '￥', // U+FFE5 全角記号
+    ]
+    for (const char of wide) {
+      assert.equal(height(char.repeat(24)), 1 + PARAGRAPH_MARGIN, char)
+      assert.equal(height(char.repeat(25)), 2 + PARAGRAPH_MARGIN, char)
+    }
+
+    // 半角として組まれるものは、同じ 0x1100 より上でも 24 字では折り返しません。
+    assert.equal(height('–'.repeat(25)), 1 + PARAGRAPH_MARGIN)
+  })
+
   it('counts a hard break as a line', () => {
     // 行末 2 スペースの強制改行は HTML の改行を作りません。1 行と数えたままだと、
     // 高さの決まった 2 段組から詩や住所があふれます。
@@ -191,6 +217,42 @@ describe('block heights', () => {
 
     // 長いセルは段の中で折り返すので、同じ行数の表でも高くなります。
     assert.ok(height(twoCellRow(fullWidth(60))) > height(twoCellRow('1')) * 2)
+  })
+
+  it('keeps counting when the HTML is not shaped like renderer output', () => {
+    // 頁分けが受け取るのは renderMarkdown の出力だけですが、数え方は走査で書いて
+    // あるので、閉じないタグや行のない表でも投げずに数え切る必要があります。
+    // 数え損ねれば、その頁だけが静かにあふれます。
+    const oneRow = blockLines('<table><tr><td>a</td></tr></table>', MAGAZINE_LAYOUT)
+
+    // 行のない表は表として数えず、地の文として数えます（この場合は 0 行）。
+    assert.ok(blockLines('<table></table>', MAGAZINE_LAYOUT) < oneRow)
+    assert.equal(
+      blockLines('<table><tr', MAGAZINE_LAYOUT),
+      blockLines('<table></table>', MAGAZINE_LAYOUT),
+    )
+    assert.ok(
+      blockLines('<table>a', MAGAZINE_LAYOUT) > blockLines('<table></table>', MAGAZINE_LAYOUT),
+    )
+    // 閉じないまま終わった行も、1 行ぶんは取ります。
+    assert.equal(blockLines('<table><tr><td>' + fullWidth(60), MAGAZINE_LAYOUT), oneRow)
+    // セルの中の改行は、組まれるときに潰れるので幅を取りません。
+    assert.equal(blockLines('<table><tr><td>a\nb</td></tr></table>', MAGAZINE_LAYOUT), oneRow)
+
+    // 実体参照になり損ねた `&` は、そのまま 1 字ぶんの幅です。
+    assert.equal(blockLines('<p>&;</p>', MAGAZINE_LAYOUT), blockLines('<p>a;</p>', MAGAZINE_LAYOUT))
+    assert.equal(
+      blockLines('<p>&amp<p>', MAGAZINE_LAYOUT),
+      blockLines('<p>aamp<p>', MAGAZINE_LAYOUT),
+    )
+    assert.equal(
+      blockLines('<p>& x</p>', MAGAZINE_LAYOUT),
+      blockLines('<p>a x</p>', MAGAZINE_LAYOUT),
+    )
+    assert.equal(blockLines('<table><tr><td>&</td></tr></table>', MAGAZINE_LAYOUT), oneRow)
+
+    // タグで始まらない断片も、1 ブロックとして頁に入ります。
+    assert.deepEqual(paginate('a', MAGAZINE_LAYOUT), ['a'])
   })
 
   it('gives every block at least one line', () => {
