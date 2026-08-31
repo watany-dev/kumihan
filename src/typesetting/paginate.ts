@@ -1,66 +1,210 @@
-export const MAGAZINE_LINES_PER_PAGE = 40
-
 /**
- * 1段組。A4 本文（297mm − 上下 46mm）に、短い段落（行送り 1.9em + 下余白 0.9em）
- * がおよそ 24 個入る。2段の 40 より小さいのは、字が大きく段もないため。
+ * 頁の寸法。行数は段の合計で、字数は段 1 本ぶん。
+ *
+ * 数字は typeset.css の指定から割り出します。両者がずれると頁があふれるので、
+ * test/paginate.test.ts が組版指定との一致を確かめます。
  */
-export const PRINT_LINES_PER_PAGE = 24
+export interface PageLayout {
+  /** 1 頁に組める本文行数。2段組は 2 段ぶんの合計。 */
+  readonly lines: number
+  /** 段 1 本の 1 行に入る全角文字の数。 */
+  readonly columnChars: number
+  /** 段の数。1 本ぶんの高さは lines をこれで割った値。 */
+  readonly columns: number
+  /** 本文の級数（pt）。見出しなど pt 指定の要素を本文行に換算するのに使う。 */
+  readonly bodyPoints: number
+  /** 本文の行送り（font-size に対する倍率）。 */
+  readonly lineHeight: number
+}
 
-// 同じ断片は組版（24 行）と 2段（40 行）の両方が頁分けします。書き出しは
-// 必ず両方を作り、プレビューもモードを切り替えるたびに同じ断片で来ます。
-// ブロック分割と行数えは断片全体の走査なので、直前の結果をひとつだけ覚えて
-// 2 回目からは頁への詰め込み（ブロック数に比例）だけで済ませます。
-// 比較は同一の文字列オブジェクトなら一瞬で、たまたま別オブジェクトでも
-// 走査 1 回ぶんより高くつきません。
-let cachedHtml: string | null = null
-let cachedBlocks: string[] = []
-let cachedCounts: number[] = []
+const MM_PER_POINT = 0.352778
 
-function blocksOf(html: string): { blocks: string[]; counts: number[] } {
-  if (html === cachedHtml) {
-    return { blocks: cachedBlocks, counts: cachedCounts }
-  }
-  const blocks = splitBlocks(html)
-  const counts: number[] = []
-  for (const block of blocks) {
-    counts.push(lineCount(block))
-  }
-  cachedHtml = html
-  cachedBlocks = blocks
-  cachedCounts = counts
-  return { blocks, counts }
+// .paper の紙と余白。版面はこれを引いた残り。
+const PAPER_WIDTH_MM = 210
+const PAPER_HEIGHT_MM = 297
+const PAPER_PAD_TOP_MM = 22
+const PAPER_PAD_SIDE_MM = 20
+const PAPER_PAD_BOTTOM_MM = 24
+
+const TEXT_WIDTH_MM = PAPER_WIDTH_MM - PAPER_PAD_SIDE_MM * 2
+const TEXT_HEIGHT_MM = PAPER_HEIGHT_MM - PAPER_PAD_TOP_MM - PAPER_PAD_BOTTOM_MM
+
+// .typeset の本文。
+const PRINT_POINTS = 10.5
+const PRINT_LINE_HEIGHT = 1.9
+
+// .typeset.cols-2 の本文と段。段の高さは CSS が min-height で決めています。
+const MAGAZINE_POINTS = 9.5
+const MAGAZINE_LINE_HEIGHT = 1.75
+const MAGAZINE_COLUMNS = 2
+const MAGAZINE_GAP_MM = 8
+/** 2段組の段 1 本の高さ（行）。typeset.css の min-height と同じ値。 */
+export const MAGAZINE_COLUMN_LINES = 40
+
+/** 段 1 本に入る全角文字の数。全角は級数と同じ幅で組まれる。 */
+function columnChars(widthMm: number, points: number): number {
+  return Math.floor(widthMm / (points * MM_PER_POINT))
+}
+
+/** 版面に入る行数。 */
+function pageLines(heightMm: number, points: number, lineHeight: number): number {
+  return Math.floor(heightMm / (points * lineHeight * MM_PER_POINT))
 }
 
 /**
- * HTML 断片の改行数で頁に詰める。ブロックの途中では切らない。
- *
- * ponytail: 折り返しや段の高さは見ない。視覚行がずれたら estimate を足す。
+ * 1段組。A4 の版面 170×251mm に、10.5pt・行送り 1.9 で 35 行、1 行 45 字。
  */
-export function paginate(html: string, linesPerPage: number): string[] {
-  const { blocks, counts } = blocksOf(html)
+export const PRINT_LAYOUT: PageLayout = {
+  lines: pageLines(TEXT_HEIGHT_MM, PRINT_POINTS, PRINT_LINE_HEIGHT),
+  columnChars: columnChars(TEXT_WIDTH_MM, PRINT_POINTS),
+  columns: 1,
+  bodyPoints: PRINT_POINTS,
+  lineHeight: PRINT_LINE_HEIGHT,
+}
+
+/**
+ * 2段組。段の幅は (170 − 8) ÷ 2 = 81mm で、9.5pt なら 1 行 24 字。
+ * 高さは CSS が段 1 本 40 行に決めているので、頁の容量はその 2 段ぶん。
+ */
+export const MAGAZINE_LAYOUT: PageLayout = {
+  lines: MAGAZINE_COLUMN_LINES * MAGAZINE_COLUMNS,
+  columnChars: columnChars(
+    (TEXT_WIDTH_MM - MAGAZINE_GAP_MM * (MAGAZINE_COLUMNS - 1)) / MAGAZINE_COLUMNS,
+    MAGAZINE_POINTS,
+  ),
+  columns: MAGAZINE_COLUMNS,
+  bodyPoints: MAGAZINE_POINTS,
+  lineHeight: MAGAZINE_LINE_HEIGHT,
+}
+
+// 同じ断片は組版と 2段の両方が頁分けします。書き出しは必ず両方を作り、
+// プレビューもモードを切り替えるたびに同じ断片で来ます。ブロック分割は
+// 頁の寸法によらないので断片ごとに一度だけ行い、行数は寸法ごとに覚えます。
+// 比較は同一の文字列オブジェクトなら一瞬で、たまたま別オブジェクトでも
+// 走査 1 回ぶんより高くつきません。
+interface CountCache {
+  columnChars: number
+  columns: number
+  bodyPoints: number
+  lineHeight: number
+  counts: number[]
+  flows: number[]
+}
+
+let cachedHtml: string | null = null
+let cachedBlocks: string[] = []
+const cachedCounts: CountCache[] = []
+
+function blocksOf(html: string, layout: PageLayout): CountCache & { blocks: string[] } {
+  if (html !== cachedHtml) {
+    cachedHtml = html
+    cachedBlocks = splitBlocks(html)
+    cachedCounts.length = 0
+  }
+
+  for (const entry of cachedCounts) {
+    if (
+      entry.columnChars === layout.columnChars &&
+      entry.columns === layout.columns &&
+      entry.bodyPoints === layout.bodyPoints &&
+      entry.lineHeight === layout.lineHeight
+    ) {
+      return { ...entry, blocks: cachedBlocks }
+    }
+  }
+
+  const counts: number[] = []
+  const flows: number[] = []
+  let previous = ''
+  for (const block of cachedBlocks) {
+    const tag = tagNameOf(block)
+    counts.push(blockLines(block, layout))
+    flows.push(flowOf(tag, block, previous, layout))
+    previous = tag
+  }
+
+  // 覚えるのは組版と 2段のぶんだけ。それ以上は古いものから捨てます。
+  const entry: CountCache = {
+    columnChars: layout.columnChars,
+    columns: layout.columns,
+    bodyPoints: layout.bodyPoints,
+    lineHeight: layout.lineHeight,
+    counts,
+    flows,
+  }
+  cachedCounts.push(entry)
+  if (cachedCounts.length > 2) {
+    cachedCounts.shift()
+  }
+  return { ...entry, blocks: cachedBlocks }
+}
+
+/**
+ * HTML 断片を頁に詰める。ブロックの途中では切らない。
+ *
+ * 詰め込みは段をひとつずつ埋めていく形で数えます。ブロックの高さを足して
+ * 頁の行数と比べるだけでは、2段組で紙があふれました。表とコードは
+ * `break-inside: avoid` で段をまたげないので、段の終わりに入りきらないと
+ * まるごと次の段へ送られ、空いた行がそのぶん無駄になります。段抜きの見出しや
+ * コードも、その前後で段を分けます。空く行は原稿しだいで頁の 2 割にもなり、
+ * 足し算だけの見積りでは埋め合わせられません。
+ */
+export function paginate(html: string, layout: PageLayout): string[] {
+  const { blocks, counts, flows } = blocksOf(html, layout)
   if (blocks.length === 0) {
     return ['']
   }
+
+  const columns = layout.columns
+  const columnLines = layout.lines / columns
 
   // 頁は文字列のまま組み立てます。いったん string[][] に貯めてから join すると、
   // 頁ごとの配列と、その中身をつないだ文字列を二重に持つことになります。
   const pages: string[] = []
   let current = ''
   let empty = true
-  let used = 0
+
+  // 段抜きは段組みを区切ります。closed は区切り済みの高さ、heights と kinds は
+  // いま積んでいる区画のブロック。
+  const heights: number[] = []
+  const kinds: number[] = []
+  let closed = 0
 
   for (let index = 0; index < blocks.length; index += 1) {
     const block = blocks[index] ?? ''
-    const lines = counts[index] ?? 1
-    if (!empty && used + lines > linesPerPage) {
-      pages.push(current)
-      current = ''
-      empty = true
-      used = 0
+    const height = counts[index] ?? 1
+    const flow = flows[index] ?? FLOW_NORMAL
+
+    if (flow === FLOW_SPAN) {
+      // 段抜きは区画を閉じ、その下に自分の高さぶんを取ります。
+      const level = closed + regionHeight(heights, kinds, columns)
+      if (!empty && level + height > columnLines) {
+        pages.push(current)
+        current = ''
+        empty = true
+        closed = height
+      } else {
+        closed = level + height
+      }
+      heights.length = 0
+      kinds.length = 0
+    } else {
+      heights.push(height)
+      kinds.push(flow)
+      if (!empty && !fitsInColumns(heights, kinds, columns, columnLines - closed)) {
+        pages.push(current)
+        current = ''
+        empty = true
+        closed = 0
+        heights.length = 0
+        kinds.length = 0
+        heights.push(height)
+        kinds.push(flow)
+      }
     }
+
     current = empty ? block : `${current}\n${block}`
     empty = false
-    used += lines
   }
   pages.push(current)
 
@@ -68,35 +212,342 @@ export function paginate(html: string, linesPerPage: number): string[] {
 }
 
 /**
- * ブロックが組まれる行数。
+ * 高さ height の段が columns 本あるとき、ブロックがそこに収まるか。
  *
- * もとは HTML の改行を数えるだけでした。renderMarkdown は組まれる行ごとに
- * 改行を入れるので大半は合いますが、2 方向にずれます。
+ * 地の文は段をまたいで流れ、`break-inside: avoid` のブロックはまたげません。
+ * またげないブロックが段の終わりに入りきらないと、まるごと次の段へ送られ、
+ * 空いた行はそのまま無駄になります。見出しは `break-after: avoid` なので、
+ * 続く 1 行ぶんの空きも同じ段に要ります。
  *
- * - 数え足りない: `<br>`（行末 2 スペースの強制改行）は改行を作りません。
- *   2 段組の紙は高さが 40 行に固定されているので、詩や住所のように強制改行が
- *   続く原稿は、1 行と数えたまま紙からあふれて消えます。
- * - 数えすぎ: `<ul>` や `<table>` の囲みタグは、それ自体では何も組まれないのに
- *   1 行ずつ数えていました。5 項目の箇条書きが 7 行、3 行の表が 9 行になり、
- *   頁が早く切れて紙が空きます。
- *
- * そこで「その行に組まれる中身があるか」で数えます。地の文か `<img>`・`<hr>` が
- * あれば 1 行、`<br>` はそこで行を終える、囲みタグだけの行は数えません。
- * 折り返しは相変わらず見ません（見るには字幅が要ります）。
+ * 段 1 本にも収まらない塊は「収まらない」と答えます。呼ぶ側は空の頁には
+ * 必ず 1 つ置くので、そういう塊は自分だけの頁を取ってはみ出します。
  */
-// 行を増やしうるもの（改行と `<br>`）。タグ名は下の走査と同じく大小を区別しません。
-const BREAKS_LINE = /\n|<br/i
-
-function lineCount(html: string): number {
-  // ブロックの大半は改行も `<br>` も無い 1 行の段落や見出しです。そのときは
-  // 下の走査がどう転んでも答えは 1 なので（中身があれば 1、無くても最後に 1 に
-  // 切り上げる）、文字を 1 つずつ読まずに済ませます。indexOf は 1 文字ずつの
-  // ループより桁で速く、ここは HTML 全体を舐める場所でした。
-  if (!BREAKS_LINE.test(html)) {
-    return 1
+function fitsInColumns(
+  heights: readonly number[],
+  kinds: readonly number[],
+  columns: number,
+  height: number,
+): boolean {
+  if (height <= 0) {
+    return false
   }
 
+  let column = 0
+  let used = 0
+  for (let i = 0; i < heights.length; i += 1) {
+    const block = heights[i] ?? 0
+    const kind = kinds[i] ?? FLOW_NORMAL
+    if (kind !== FLOW_NORMAL) {
+      // 見出しは直後の 1 行も連れるので、そのぶんの空きも見ます。
+      const needed = kind === FLOW_KEEP_WITH_NEXT ? block + 1 : block
+      if (used > 0 && used + needed > height) {
+        column += 1
+        used = 0
+        if (column >= columns) {
+          return false
+        }
+      }
+      used += block
+      if (used > height) {
+        return false
+      }
+      continue
+    }
+
+    let rest = block
+    while (rest > 0) {
+      const space = height - used
+      if (space <= 0) {
+        column += 1
+        used = 0
+        if (column >= columns) {
+          return false
+        }
+        continue
+      }
+      const take = rest < space ? rest : space
+      used += take
+      rest -= take
+    }
+  }
+  return true
+}
+
+/**
+ * 区画が組まれる高さ。`column-fill: balance` は中身を段へ均等に割るので、
+ * 地の文だけなら合計を段の数で割った値です。段をまたげないブロックがあると
+ * 均等には割れないので、収まる高さのうちいちばん低いものを探します。
+ */
+function regionHeight(
+  heights: readonly number[],
+  kinds: readonly number[],
+  columns: number,
+): number {
+  let sum = 0
+  let tallest = 0
+  for (let i = 0; i < heights.length; i += 1) {
+    const block = heights[i] ?? 0
+    sum += block
+    if ((kinds[i] ?? FLOW_NORMAL) !== FLOW_NORMAL && block > tallest) {
+      tallest = block
+    }
+  }
+
+  const balanced = sum / columns
+  if (tallest === 0 || columns === 1) {
+    return balanced
+  }
+
+  // 均等割りでは収まらないことがある。収まる高さを二分探索する。
+  // 段をまたげないブロックはそれ自体が段に入る必要があるので、いちばん高い
+  // ものが下限。1 本に積み上げた高さ（sum）なら必ず収まるので、そこが上限。
+  let low = balanced > tallest ? balanced : tallest
+  let high = sum
+  if (high <= low) {
+    return low
+  }
+  while (high - low > REGION_PRECISION) {
+    const middle = (low + high) / 2
+    if (fitsInColumns(heights, kinds, columns, middle)) {
+      high = middle
+    } else {
+      low = middle
+    }
+  }
+  return high
+}
+
+// 二分探索を止める幅。行の 100 分の 1 まで合えば、頁の詰まり方は変わらない。
+const REGION_PRECISION = 0.01
+
+// ===== 組み上がりの見積り =====
+//
+// もとは HTML の改行を数えるだけでした。renderMarkdown は組まれる行ごとに
+// 改行を入れるので「1 行の段落」は当たりますが、日本語の原稿は 1 つの段落を
+// 1 行に書くのがふつうで、折り返しはブラウザに任せます。300 字の段落は
+// 2段組の 24 字の段では 13 行に組まれるのに、1 行と数えていました。
+//
+// 数え違いは 2段組で紙を壊します。段の高さは CSS で決まっているので、入り
+// きらない中身は段の右外に「あふれ段」として並び、紙の外にはみ出して切れます。
+// そこで、折り返し・前後の余白・段抜きまで見て、組まれる高さを本文行で数えます。
+//
+// 字幅は全角 1em・半角 0.5em として、半角ぶんを 1 とする整数で測ります。実際の
+// 字送りは書体で変わるので、これは見当です。見当が外れても紙が壊れないよう、
+// typeset.css は段の高さを min-height で持ち、あふれた頁は横に流さず縦に伸ばします。
+//
+// 画像だけは組み上がりの高さが分かりません（原寸を読まないと決まらない）。
+// 従来どおり 1 行として数えるので、大きな図のある頁は縦に伸びます。
+
+/** 半角 1 字を 1 とする幅の単位。全角はこの 2 つぶん。 */
+const HALF = 1
+const FULL = 2
+
+// typeset.css の寸法。単位のない数は em（その要素の級数基準）。
+const PARAGRAPH_MARGIN_EM = 0.9
+const HEADING_LINE_HEIGHT = 1.45
+const H1_POINTS = 18
+const H1_MARGIN_EM = 1.1
+const H1_LETTER_SPACING_EM = 0.06
+const H2_POINTS = 13.5
+const H2_MARGIN_EM = 1.8 + 0.7 + 0.28
+const H3_POINTS = 12
+const H3_MARGIN_EM = 1.5 + 0.5
+const LIST_MARGIN_EM = 0.9
+const LIST_INDENT_EM = 1.5
+// 隣り合う項目の margin は重なるので、項目ごとに数えるのは片側だけ。
+const LIST_ITEM_MARGIN_EM = 0.15
+const QUOTE_MARGIN_EM = 1.2 + 1.2 + 0.15 + 0.15
+const QUOTE_INDENT_EM = 0.4 + 1
+const QUOTE_ITEM_MARGIN_EM = 0.9
+const CODE_RATIO = 0.92
+const CODE_LINE_HEIGHT = 1.6
+const CODE_MARGIN_EM = 1.1 + 1 + 1
+const CODE_INDENT_EM = 1.1 + 1.1
+const TABLE_RATIO = 0.95
+const TABLE_MARGIN_EM = 1.1
+const CELL_PADDING_Y_EM = 0.35 + 0.35
+const CELL_PADDING_X_EM = 0.65 + 0.65
+const RULE_MARGIN_EM = 2 + 2
+
+// 等幅の半角は本文の半角より広い。字送りは書体しだいだが、おおむね 0.6em。
+const MONOSPACE_WIDTH = 1.2
+
+/** ブロックの組み上がり。すべて本文行を単位にする。 */
+interface BlockMetrics {
+  /** 本文に対する字の大きさ。1 行に入る字数はこれで割る。 */
+  fontRatio: number
+  /** 組まれる 1 行が本文行いくつぶんか。 */
+  lineRatio: number
+  /** 段から削られる幅（本文 em）。 */
+  indentEm: number
+  /** ブロックの前後の余白。 */
+  lead: number
+  /** 行のまとまり（箇条書きの項目、引用の段落）ごとの余白。 */
+  runLead: number
+}
+
+/** em を本文行に直す。points はその em の基準になる級数。 */
+function toLines(em: number, points: number, layout: PageLayout): number {
+  return (em * points) / (layout.bodyPoints * layout.lineHeight)
+}
+
+function heading(
+  points: number,
+  marginEm: number,
+  letterSpacingEm: number,
+  layout: PageLayout,
+): BlockMetrics {
+  return {
+    fontRatio: (points / layout.bodyPoints) * (1 + letterSpacingEm),
+    lineRatio: toLines(HEADING_LINE_HEIGHT, points, layout),
+    indentEm: 0,
+    lead: toLines(marginEm, points, layout),
+    runLead: 0,
+  }
+}
+
+function metricsOf(tag: string, layout: PageLayout): BlockMetrics {
+  const body = layout.bodyPoints
+  switch (tag) {
+    case 'h1':
+      return heading(H1_POINTS, H1_MARGIN_EM, H1_LETTER_SPACING_EM, layout)
+    case 'h2':
+      return heading(H2_POINTS, H2_MARGIN_EM, 0, layout)
+    case 'h3':
+      return heading(H3_POINTS, H3_MARGIN_EM, 0, layout)
+    case 'p':
+      return {
+        fontRatio: 1,
+        lineRatio: 1,
+        indentEm: 0,
+        lead: toLines(PARAGRAPH_MARGIN_EM, body, layout),
+        runLead: 0,
+      }
+    case 'ul':
+    case 'ol':
+      return {
+        fontRatio: 1,
+        lineRatio: 1,
+        indentEm: LIST_INDENT_EM,
+        lead: toLines(LIST_MARGIN_EM, body, layout),
+        runLead: toLines(LIST_ITEM_MARGIN_EM, body, layout),
+      }
+    case 'blockquote':
+      return {
+        fontRatio: 1,
+        lineRatio: 1,
+        indentEm: QUOTE_INDENT_EM,
+        lead: toLines(QUOTE_MARGIN_EM, body, layout),
+        runLead: toLines(QUOTE_ITEM_MARGIN_EM, body, layout),
+      }
+    case 'pre':
+      return {
+        fontRatio: CODE_RATIO * MONOSPACE_WIDTH,
+        lineRatio: toLines(CODE_LINE_HEIGHT, CODE_RATIO * body, layout),
+        indentEm: CODE_INDENT_EM * CODE_RATIO,
+        lead: toLines(CODE_MARGIN_EM, CODE_RATIO * body, layout),
+        runLead: 0,
+      }
+    case 'table':
+      return {
+        fontRatio: TABLE_RATIO,
+        lineRatio: toLines(layout.lineHeight, TABLE_RATIO * body, layout),
+        indentEm: 0,
+        lead: toLines(TABLE_MARGIN_EM, TABLE_RATIO * body, layout),
+        runLead: toLines(CELL_PADDING_Y_EM, TABLE_RATIO * body, layout),
+      }
+    case 'hr':
+      return {
+        fontRatio: 1,
+        lineRatio: 1,
+        indentEm: 0,
+        lead: toLines(RULE_MARGIN_EM, body, layout),
+        runLead: 0,
+      }
+    default:
+      return { fontRatio: 1, lineRatio: 1, indentEm: 0, lead: 0, runLead: 0 }
+  }
+}
+
+/**
+ * ブロック 1 つの、段 1 本ぶんの組み上がりの高さ（本文行）。
+ * 見当の当たり外れは頁の詰まり具合にそのまま出るので、テストが実寸と比べます。
+ */
+export function blockLines(block: string, layout: PageLayout): number {
+  const tag = tagNameOf(block)
+  const metrics = metricsOf(tag, layout)
+
+  // 1 行に入る幅。全角 1 字を FULL として測るので、段の字数もその単位に直す。
+  const capacity = Math.max(
+    FULL,
+    (FULL * (layout.columnChars - metrics.indentEm)) / metrics.fontRatio,
+  )
+
+  const counted = tag === 'table' ? tableRuns(block, capacity) : textRuns(block, capacity)
+  const height = metrics.lead + counted.lines * metrics.lineRatio + counted.runs * metrics.runLead
+
+  // 何も組まれないブロックでも、詰め込みが進むよう 1 行は取ります。
+  return height > 0 ? height : 1
+}
+
+// ブロックが段をどう流れるか。
+/** 段をまたいで流れる（地の文）。 */
+const FLOW_NORMAL = 0
+/** 段をまたげない（`break-inside: avoid` の表とコード）。 */
+const FLOW_KEEP = 1
+/** 段をまたげず、直後の 1 行も連れる（`break-after: avoid` の見出し）。 */
+const FLOW_KEEP_WITH_NEXT = 2
+/** すべての段を横切る（`column-span: all`）。 */
+const FLOW_SPAN = 3
+
+/**
+ * typeset.css の break-inside / break-after / column-span を、
+ * 段への詰め込み方に読み替えます。段抜きは 2段組のときだけです。
+ */
+function flowOf(tag: string, block: string, previousTag: string, layout: PageLayout): number {
+  const spans = layout.columns > 1
+  switch (tag) {
+    case 'h1':
+      return spans ? FLOW_SPAN : FLOW_KEEP_WITH_NEXT
+    case 'h2':
+    case 'h3':
+      return FLOW_KEEP_WITH_NEXT
+    case 'pre':
+      return spans ? FLOW_SPAN : FLOW_KEEP
+    case 'hr':
+      return spans ? FLOW_SPAN : FLOW_NORMAL
+    case 'table':
+      return FLOW_KEEP
+    case 'p':
+      return spans && (previousTag === 'h1' || isImageParagraph(block)) ? FLOW_SPAN : FLOW_NORMAL
+    default:
+      return FLOW_NORMAL
+  }
+}
+
+interface Counted {
+  /** 組まれる行数。 */
+  lines: number
+  /** 行のまとまりの数（`<br>` と改行で区切られる）。 */
+  runs: number
+}
+
+/** 幅 width の地の文が capacity の行に何行で組まれるか。 */
+function wrapped(width: number, capacity: number): number {
+  const lines = Math.ceil(width / capacity)
+  return lines > 1 ? lines : 1
+}
+
+/**
+ * ブロックの地の文を、折り返し込みで数える。
+ *
+ * 囲みタグ（`<ul>` や `<table>`）だけの行は何も組まれないので数えません。
+ * `<br>`（行末 2 スペースの強制改行）と改行は、そこで行を終えます。
+ */
+function textRuns(html: string, capacity: number): Counted {
   let lines = 0
+  let runs = 0
+  let width = 0
   let visible = false
   let inTag = false
 
@@ -111,30 +562,242 @@ function lineCount(html: string): number {
     if (code === 0x3c) {
       inTag = true
       if (isTag(html, i + 1, 'br')) {
-        lines += 1
+        if (visible) {
+          lines += wrapped(width, capacity)
+          runs += 1
+        }
+        width = 0
         visible = false
       } else if (isTag(html, i + 1, 'hr') || isTag(html, i + 1, 'img')) {
+        // 高さは分からないので、1 行あるものとして扱う。
         visible = true
       }
       continue
     }
     if (code === 0x0a) {
       if (visible) {
-        lines += 1
+        lines += wrapped(width, capacity)
+        runs += 1
       }
+      width = 0
       visible = false
       continue
     }
-    if (code !== 0x20 && code !== 0x09 && code !== 0x0d) {
-      visible = true
+    if (code === 0x26) {
+      const end = entityEnd(html, i)
+      if (end !== -1) {
+        width += HALF
+        visible = true
+        i = end
+        continue
+      }
     }
+    if (code === 0x20 || code === 0x09 || code === 0x0d) {
+      // 行頭に寄せられる空白は幅を取らない。
+      if (visible) {
+        width += HALF
+      }
+      continue
+    }
+    width += charWidth(code)
+    visible = true
   }
 
   if (visible) {
-    lines += 1
+    lines += wrapped(width, capacity)
+    runs += 1
   }
-  // 何も組まれないブロックでも、詰め込みが進むよう 1 行は取ります。
-  return lines === 0 ? 1 : lines
+  return { lines, runs }
+}
+
+/**
+ * 表の組み上がり。列の幅は、その列でいちばん長いセルの比で分け合うものとする
+ * （幅の足りない表をブラウザが組むときのふるまいに近い）。行の高さは、その行で
+ * いちばん多く折り返したセルで決まる。
+ */
+function tableRuns(html: string, capacity: number): Counted {
+  const rows = tableCells(html)
+  if (rows.length === 0) {
+    return textRuns(html, capacity)
+  }
+
+  let columns = 0
+  for (const row of rows) {
+    if (row.length > columns) {
+      columns = row.length
+    }
+  }
+
+  const widest: number[] = Array.from({ length: columns }, () => 0)
+  for (const row of rows) {
+    for (let i = 0; i < row.length; i += 1) {
+      const cell = row[i] ?? 0
+      if (cell > (widest[i] ?? 0)) {
+        widest[i] = cell
+      }
+    }
+  }
+
+  let total = 0
+  for (const width of widest) {
+    total += width
+  }
+
+  // 枠と余白のぶんは、どの列からも先に引かれる。
+  const usable = Math.max(capacity - columns * FULL * CELL_PADDING_X_EM, columns * FULL)
+  let lines = 0
+  for (const row of rows) {
+    let tallest = 1
+    for (let i = 0; i < row.length; i += 1) {
+      const cell = row[i] ?? 0
+      const share = total > 0 ? (usable * (widest[i] ?? 0)) / total : usable / columns
+      const height = wrapped(cell, Math.max(share, FULL))
+      if (height > tallest) {
+        tallest = height
+      }
+    }
+    lines += tallest
+  }
+  return { lines, runs: rows.length }
+}
+
+/** 表の各行の、セルごとの地の文の幅。 */
+function tableCells(html: string): number[][] {
+  const rows: number[][] = []
+  let row: number[] | null = null
+  let cellStart = -1
+  let i = 0
+
+  while (i < html.length) {
+    const lt = html.indexOf('<', i)
+    if (lt === -1) break
+    const gt = html.indexOf('>', lt)
+    if (gt === -1) break
+
+    const closing = html.charCodeAt(lt + 1) === 0x2f
+    const nameStart = closing ? lt + 2 : lt + 1
+    const nameEnd = tagNameEnd(html, nameStart)
+
+    if (isName(html, nameStart, nameEnd, 'tr')) {
+      if (row !== null) {
+        rows.push(row)
+      }
+      row = closing ? null : []
+      cellStart = -1
+    } else if (isName(html, nameStart, nameEnd, 'td') || isName(html, nameStart, nameEnd, 'th')) {
+      if (closing) {
+        if (row !== null && cellStart !== -1) {
+          row.push(spanWidth(html, cellStart, lt))
+          cellStart = -1
+        }
+      } else if (row !== null) {
+        cellStart = gt + 1
+      }
+    }
+    i = gt + 1
+  }
+
+  if (row !== null) {
+    rows.push(row)
+  }
+  return rows
+}
+
+/** html の [from, to) にある地の文の幅。タグの中身は数えない。 */
+function spanWidth(html: string, from: number, to: number): number {
+  let width = 0
+  let inTag = false
+  for (let i = from; i < to; i += 1) {
+    const code = html.charCodeAt(i)
+    if (inTag) {
+      if (code === 0x3e) {
+        inTag = false
+      }
+      continue
+    }
+    if (code === 0x3c) {
+      inTag = true
+      continue
+    }
+    if (code === 0x26) {
+      const end = entityEnd(html, i)
+      if (end !== -1 && end < to) {
+        width += HALF
+        i = end
+        continue
+      }
+    }
+    if (code === 0x0a || code === 0x0d || code === 0x09) {
+      continue
+    }
+    width += charWidth(code)
+  }
+  return width
+}
+
+/**
+ * 全角として組まれる符号位置（East Asian Wide / Fullwidth）。半角は 1、全角は 2。
+ * サロゲート対は先頭で 2 を数え、続きの 1 つは数えません。
+ */
+function charWidth(code: number): number {
+  if (code < 0x1100) {
+    return HALF
+  }
+  if (code >= 0xdc00 && code <= 0xdfff) {
+    return 0
+  }
+  if (
+    (code >= 0x1100 && code <= 0x115f) ||
+    (code >= 0x2e80 && code <= 0x303e) ||
+    (code >= 0x3041 && code <= 0x33ff) ||
+    (code >= 0x3400 && code <= 0x4dbf) ||
+    (code >= 0x4e00 && code <= 0x9fff) ||
+    (code >= 0xa000 && code <= 0xa4cf) ||
+    (code >= 0xac00 && code <= 0xd7a3) ||
+    (code >= 0xd800 && code <= 0xdbff) ||
+    (code >= 0xf900 && code <= 0xfaff) ||
+    (code >= 0xfe10 && code <= 0xfe6f) ||
+    (code >= 0xff00 && code <= 0xff60) ||
+    (code >= 0xffe0 && code <= 0xffe6)
+  ) {
+    return FULL
+  }
+  return HALF
+}
+
+// `&` から始まる実体参照の `;` の位置。参照でなければ -1。組まれるのは 1 字。
+const ENTITY_MAX = 10
+
+function entityEnd(html: string, start: number): number {
+  const limit = Math.min(start + ENTITY_MAX, html.length)
+  for (let i = start + 1; i < limit; i += 1) {
+    const code = html.charCodeAt(i)
+    if (code === 0x3b) {
+      return i > start + 1 ? i : -1
+    }
+    if (code === 0x20 || code === 0x3c || code === 0x26) {
+      return -1
+    }
+  }
+  return -1
+}
+
+/** ブロックの先頭のタグ名（小文字）。タグで始まらなければ空文字。 */
+function tagNameOf(block: string): string {
+  if (block.charCodeAt(0) !== 0x3c) {
+    return ''
+  }
+  const end = tagNameEnd(block, 1)
+  return end === 1 ? '' : block.slice(1, end).toLowerCase()
+}
+
+/** 画像だけの段落（`p:has(> img:only-child)`）か。2段組では段を抜く。 */
+function isImageParagraph(block: string): boolean {
+  if (!block.startsWith('<p><img')) {
+    return false
+  }
+  const gt = block.indexOf('>', 7)
+  return gt !== -1 && block.slice(gt + 1) === '</p>'
 }
 
 // `<` の次から始まるタグ名が name かどうか。slice を作らずに比べます。

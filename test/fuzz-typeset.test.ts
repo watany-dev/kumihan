@@ -4,8 +4,9 @@ import { describe, it } from 'vite-plus/test'
 
 import { renderMarkdown } from '../src/markdown/render.js'
 import {
-  MAGAZINE_LINES_PER_PAGE,
-  PRINT_LINES_PER_PAGE,
+  MAGAZINE_LAYOUT,
+  PRINT_LAYOUT,
+  type PageLayout,
   paginate,
 } from '../src/typesetting/paginate.js'
 import { renderDocument, type PreviewMode } from '../src/typesetting/render-page.js'
@@ -131,6 +132,13 @@ function tagStream(html: string): string {
 
 const MODES: PreviewMode[] = ['print', 'magazine', 'web']
 
+// 実際の 2 つの頁と、ブロックごとに切れるだけの小さな頁。
+const SIZES: PageLayout[] = [
+  { ...MAGAZINE_LAYOUT, lines: 1, columns: 1 },
+  PRINT_LAYOUT,
+  MAGAZINE_LAYOUT,
+]
+
 describe('typesetting fuzzing', () => {
   it('keeps every page well formed and loses nothing', () => {
     for (let seed = 1; seed <= 2000; seed += 1) {
@@ -138,14 +146,22 @@ describe('typesetting fuzzing', () => {
       const html = renderMarkdown(source)
       const context = `seed ${seed} / 入力 ${JSON.stringify(source.slice(0, 200))}`
 
-      for (const size of [1, PRINT_LINES_PER_PAGE, MAGAZINE_LINES_PER_PAGE]) {
+      for (const size of SIZES) {
         const pages = paginate(html, size)
         assert.ok(pages.length > 0, context)
         const joined = pages.join('\n')
-        assert.equal(textOnly(joined), textOnly(html), `${size} 行: 本文が変わった。${context}`)
-        assert.equal(tagStream(joined), tagStream(html), `${size} 行: タグ列が変わった。${context}`)
+        assert.equal(
+          textOnly(joined),
+          textOnly(html),
+          `${size.lines} 行: 本文が変わった。${context}`,
+        )
+        assert.equal(
+          tagStream(joined),
+          tagStream(html),
+          `${size.lines} 行: タグ列が変わった。${context}`,
+        )
         for (const page of pages) {
-          assert.deepEqual(unbalanced(page), [], `${size} 行: ${context}`)
+          assert.deepEqual(unbalanced(page), [], `${size.lines} 行: ${context}`)
         }
       }
     }
@@ -170,10 +186,7 @@ describe('typesetting fuzzing', () => {
   it('renders the same pages for the same input', () => {
     for (let seed = 1; seed <= 200; seed += 1) {
       const html = renderMarkdown(generate(seed * 2246822519))
-      assert.deepEqual(
-        paginate(html, MAGAZINE_LINES_PER_PAGE),
-        paginate(html, MAGAZINE_LINES_PER_PAGE),
-      )
+      assert.deepEqual(paginate(html, MAGAZINE_LAYOUT), paginate(html, MAGAZINE_LAYOUT))
     }
   })
 })

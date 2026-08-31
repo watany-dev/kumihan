@@ -6,7 +6,7 @@ import { escapeHtml, sanitizeImageUrl, sanitizeUrl, unescapeHtml } from '../src/
 import { HARD_BREAK } from '../src/markdown/hard-break.js'
 import { renderInline } from '../src/markdown/inline.js'
 import { renderMarkdown } from '../src/markdown/render.js'
-import { paginate } from '../src/typesetting/paginate.js'
+import { MAGAZINE_LAYOUT, type PageLayout, paginate } from '../src/typesetting/paginate.js'
 
 // ファジングは「たまたま当たった入力」を試します。ここでは逆に、記法を作る
 // 記号だけの小さなアルファベットを決めて、その長さまでの入力を *全部* 通します。
@@ -134,6 +134,12 @@ const ALPHABETS: Record<string, readonly string[]> = {
   表: ['|', '---', ':---:', '\n', 'a', '`', '\\|', '<', '*', '[', '](', ')'],
 }
 
+// ブロックごとに、あるいは数ブロックごとに切れる小さな頁。
+const TINY_PAGES: PageLayout[] = [
+  { ...MAGAZINE_LAYOUT, lines: 1, columns: 1 },
+  { ...MAGAZINE_LAYOUT, lines: 3, columns: 1 },
+]
+
 describe('数え上げ検査: 出力に注入は現れない', () => {
   for (const [name, alphabet] of Object.entries(ALPHABETS)) {
     it(`${name}記法のすべての組み合わせ`, () => {
@@ -143,12 +149,12 @@ describe('数え上げ検査: 出力に注入は現れない', () => {
 
         // 頁分けは出来上がった HTML を切り分けます。要素の途中で切ると
         // 属性の外に文字が出てしまうので、切ったあとも同じ性質を求めます。
-        for (const perPage of [1, 3]) {
+        for (const perPage of TINY_PAGES) {
           for (const page of paginate(html, perPage)) {
             assert.deepEqual(
               injections(page),
               [],
-              `${JSON.stringify(source)} を ${perPage} 行で分割 -> ${page}`,
+              `${JSON.stringify(source)} を ${perPage.lines} 行で分割 -> ${page}`,
             )
           }
         }
