@@ -63,23 +63,43 @@ ${html}
 </body>`
   }
 
+  const head = runningHead(html)
+
   if (mode === 'magazine') {
     return `<body>
   ${modeSwitcher(mode)}
-${renderPapers(paginate(html, MAGAZINE_LAYOUT), 'typeset cols-2')}
+${renderPapers(paginate(html, MAGAZINE_LAYOUT), 'typeset cols-2', head)}
 </body>`
   }
 
   return `<body>
   ${modeSwitcher(mode)}
-${renderPapers(paginate(html, PRINT_LAYOUT), 'typeset')}
+${renderPapers(paginate(html, PRINT_LAYOUT), 'typeset', head)}
 </body>`
 }
 
-function renderPapers(pages: string[], articleClass: string): string {
+/**
+ * 柱に出す文字。原稿の最初の h1 の中身から、インラインのタグだけを外したもの。
+ *
+ * renderMarkdown は本文も属性値も escapeHtml を通すので、地の文の `>` は実体
+ * 参照になっています。つまり `<...>` は本物のタグだけで、そのまま外せます。
+ * 外したあとの文字列もエスケープ済みのままなので（`"` は `&quot;`）、
+ * data-head の値にそのまま置けます。
+ */
+function runningHead(html: string): string {
+  const inner = /<h1[^>]*>([\s\S]*?)<\/h1>/.exec(html)?.[1]
+  return inner === undefined ? '' : inner.replace(/<[^>]*>/g, '').trim()
+}
+
+/**
+ * 紙を並べる。下余白のノンブルは data-page、上余白の柱は data-head で渡し、
+ * 置き方は CSS の擬似要素に任せます。柱は 1 枚目には出しません。
+ */
+function renderPapers(pages: string[], articleClass: string, head: string): string {
+  const headAttr = head === '' ? '' : ` data-head="${head}"`
   return pages
     .map(
-      (page) => `  <div class="paper">
+      (page, index) => `  <div class="paper" data-page="${index + 1}"${index === 0 ? '' : headAttr}>
     <article class="${articleClass}">
 ${page}
     </article>
