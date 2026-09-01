@@ -15,6 +15,7 @@ describe('toManuscript', () => {
       await writeFile(source, '# 最初\n')
       const manuscript = toManuscript(source)
       assert.equal(manuscript.root, dir)
+      assert.equal(manuscript.file, source)
       assert.equal(await manuscript.read(), '# 最初\n')
       await writeFile(source, '# 次\n')
       assert.equal(await manuscript.read(), '# 次\n')
@@ -40,6 +41,7 @@ describe('memoryManuscript', () => {
   it('returns the same text and defaults its root to the working directory', async () => {
     const manuscript = memoryManuscript('# パイプ\n')
     assert.equal(manuscript.root, process.cwd())
+    assert.equal(manuscript.file, undefined)
     assert.equal(await manuscript.read(), '# パイプ\n')
   })
 })

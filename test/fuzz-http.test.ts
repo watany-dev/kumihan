@@ -69,6 +69,8 @@ const TARGETS: (string | undefined)[] = [
   'magazine.html',
   '/magazine.html',
   '/web.html',
+  '/diff.html',
+  '/diff',
   '/health',
   '/assets/typeset.css',
   '/assets/web.css',

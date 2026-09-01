@@ -1,6 +1,7 @@
 import { escapeHtml } from './escape.js'
 import { HARD_BREAK, stripHardBreakSentinel } from './hard-break.js'
 import { renderInline } from './inline.js'
+import { segmentEnd } from './segments.js'
 import { isTableStart, parseTable } from './table.js'
 
 function lineAt(lines: readonly string[], index: number): string {
@@ -60,6 +61,19 @@ function normalizeNewlines(source: string): string {
 
 export function renderMarkdown(source: string): string {
   return renderIncremental(source)
+}
+
+/** 改行と強制改行の目印を、増分変換と同じ規則で正規化する。 */
+export function normalizeMarkdown(source: string): string {
+  return stripHardBreakSentinel(normalizeNewlines(source))
+}
+
+/**
+ * 区画 1 つの変換。増分キャッシュ（lastRender）は触らない。
+ * 渡す文字列は正規化済みであること。
+ */
+export function renderMarkdownPiece(segment: string): string {
+  return renderLines(segment.split('\n'), 0)
 }
 
 // ===== 増分変換 =====
@@ -301,50 +315,6 @@ function spliceTail(
     const end = numberAt(previous.htmlEnds, tail + k)
     htmlEnds[target] = end === from ? base : end + shift
   }
-}
-
-/**
- * start（行頭）から始まる区画の終端を返します。フェンスコードの外にある
- * 最初の空行（`\n\n`）の 1 つ目の `\n` の位置、無ければ text.length。
- *
- * renderLines と同じく「``` で始まる行」がフェンスの開閉を切り替えます。
- * 空行の候補ごとに、そこまでの ``` 行の数の偶奇を数え、奇数（フェンスの中）
- * なら区切りにせず先へ延ばします。走査は区画の中に閉じているので、全体の
- * 走査量は原稿の長さに比例したままです。
- */
-function segmentEnd(text: string, start: number): number {
-  let insideFence = isFenceLineAt(text, start)
-  let scanned = start
-  let cursor = start
-  while (true) {
-    const boundary = text.indexOf('\n\n', cursor)
-    if (boundary === -1) {
-      return text.length
-    }
-    // [scanned, boundary) にある「``` で始まる行」を数えます。2 行目以降の
-    // 行頭は `\n` の次なので、`\n` 込みで探せば行頭だけに一致します
-    // （1 行目は上の isFenceLineAt が見ています）。
-    const window = text.slice(scanned, boundary)
-    let at = window.indexOf('\n```')
-    while (at !== -1) {
-      insideFence = !insideFence
-      // 次の一致の `\n` は、いま見つけた行の ``` 3 文字より後ろにしかない。
-      at = window.indexOf('\n```', at + 4)
-    }
-    scanned = boundary
-    if (!insideFence) {
-      return boundary
-    }
-    cursor = boundary + 1
-  }
-}
-
-function isFenceLineAt(text: string, at: number): boolean {
-  return (
-    text.charCodeAt(at) === BACKTICK &&
-    text.charCodeAt(at + 1) === BACKTICK &&
-    text.charCodeAt(at + 2) === BACKTICK
-  )
 }
 
 /**

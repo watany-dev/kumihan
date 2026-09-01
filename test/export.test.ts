@@ -39,6 +39,10 @@ describe('exportSite', () => {
       '/assets/typeset.css',
       '/assets/web.css',
     ])
+    assert.equal(
+      paths.some((path) => path.includes('diff')),
+      false,
+    )
 
     const index = assets[0]
     const magazine = assets[1]
@@ -58,6 +62,10 @@ describe('exportSite', () => {
     assert.equal(webStyles.response.headers.get('Content-Type'), 'text/css; charset=utf-8')
     assert.equal(await css.response.text(), typesetCss)
     assert.equal(await webStyles.response.text(), webCss)
+    const webHtml = await web.response.text()
+    assert.equal((webHtml.match(/class="mode-switch-link/g) ?? []).length, 3)
+    assert.equal(webHtml.includes('差分'), false)
+    assert.equal(webHtml.includes('diff.html'), false)
   })
 
   it('uses the same renderer as preview', async () => {

@@ -14,6 +14,13 @@ export interface RenderDocumentOptions {
    * 静的 HTML にはスクリプトが入らず、CSP も `script-src 'none'` のまま。
    */
   liveReload?: string
+  /**
+   * 切替に「差分」を出す。git が使えるプレビューだけ true。
+   * export と既定では出さないので、既存の document / export テストは動かない。
+   */
+  diffLink?: boolean
+  /** 「差分」を現在のページとして印を付ける。`/diff` だけ true。 */
+  diffActive?: boolean
 }
 
 export function renderDocument(html: string, options?: RenderDocumentOptions): string {
@@ -25,6 +32,8 @@ export function renderDocument(html: string, options?: RenderDocumentOptions): s
   const viewport =
     mode === 'web' ? '  <meta name="viewport" content="width=device-width, initial-scale=1">\n' : ''
   const liveReload = options?.liveReload
+  const diffLink = options?.diffLink === true
+  const diffActive = diffLink && options?.diffActive === true
 
   return `<!DOCTYPE html>
 <html lang="${language}">
@@ -34,7 +43,7 @@ ${viewport}${documentSecurityMeta(liveReload === undefined ? 'export' : 'preview
   <title>${title}</title>
   <link rel="stylesheet" href="${stylesheet}">
 ${liveReload === undefined ? '' : liveReloadHead(liveReload)}</head>
-${renderBody(html, mode)}
+${renderBody(html, mode, diffLink, diffActive)}
 </html>
 `
 }
@@ -46,13 +55,18 @@ function liveReloadHead(version: string): string {
 `
 }
 
-function renderBody(html: string, mode: PreviewMode): string {
+function renderBody(
+  html: string,
+  mode: PreviewMode,
+  diffLink: boolean,
+  diffActive: boolean,
+): string {
   if (mode === 'web') {
     return `<body class="web">
   <header class="site-header">
     <div class="site-header-inner">
       <p class="site-brand">kumihan</p>
-      ${modeSwitcher(mode)}
+      ${modeSwitcher(mode, diffLink, diffActive)}
     </div>
   </header>
   <main class="article-shell">
@@ -67,13 +81,13 @@ ${html}
 
   if (mode === 'magazine') {
     return `<body>
-  ${modeSwitcher(mode)}
+  ${modeSwitcher(mode, diffLink, diffActive)}
 ${renderPapers(paginate(html, MAGAZINE_LAYOUT), 'typeset cols-2', head)}
 </body>`
   }
 
   return `<body>
-  ${modeSwitcher(mode)}
+  ${modeSwitcher(mode, diffLink, diffActive)}
 ${renderPapers(paginate(html, PRINT_LAYOUT), 'typeset', head)}
 </body>`
 }
@@ -108,14 +122,17 @@ ${page}
     .join('\n')
 }
 
-function modeSwitcher(mode: PreviewMode): string {
-  const printActive = mode === 'print'
-  const magazineActive = mode === 'magazine'
-  const webActive = mode === 'web'
+function modeSwitcher(mode: PreviewMode, diffLink: boolean, diffActive: boolean): string {
+  const printActive = !diffActive && mode === 'print'
+  const magazineActive = !diffActive && mode === 'magazine'
+  const webActive = !diffActive && mode === 'web'
+  const diff = diffLink
+    ? `\n    <a class="mode-switch-link${diffActive ? ' is-active' : ''}" href="diff.html"${diffActive ? ' aria-current="page"' : ''}>差分</a>`
+    : ''
 
   return `<nav class="mode-switch" aria-label="表示モード">
     <a class="mode-switch-link${printActive ? ' is-active' : ''}" href="./"${printActive ? ' aria-current="page"' : ''}>組版</a>
     <a class="mode-switch-link${magazineActive ? ' is-active' : ''}" href="magazine.html"${magazineActive ? ' aria-current="page"' : ''}>2段</a>
-    <a class="mode-switch-link${webActive ? ' is-active' : ''}" href="web.html"${webActive ? ' aria-current="page"' : ''}>Web</a>
+    <a class="mode-switch-link${webActive ? ' is-active' : ''}" href="web.html"${webActive ? ' aria-current="page"' : ''}>Web</a>${diff}
   </nav>`
 }

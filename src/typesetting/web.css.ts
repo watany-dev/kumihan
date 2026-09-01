@@ -127,6 +127,29 @@ body.web {
   contain-intrinsic-size: auto 3rem;
 }
 
+.article .diff-added,
+.article .diff-removed {
+  margin: 0 0 1.25em;
+  padding: 0.55em 0.9em 0.55em 0.85em;
+  border-left: 4px solid;
+}
+
+.article .diff-added {
+  border-left-color: #2e7d32;
+  background: #f1f8f2;
+}
+
+.article .diff-removed {
+  border-left-color: #e60012;
+  background: #fdf2f3;
+  color: #5c3333;
+}
+
+.article .diff-added > :last-child,
+.article .diff-removed > :last-child {
+  margin-bottom: 0;
+}
+
 .article h1,
 .article h2,
 .article h3 {
