@@ -58,8 +58,7 @@ const source = arg ?? 'content/index.md'
 // ときだけ読む。そうしないと `bun run dev` を端末以外から起動したとき、
 // 閉じない標準入力で待ち受けまで届かない。
 let manuscript: ManuscriptSource = source
-const takeStdin =
-  arg === '-' || (command === 'export' && arg === undefined && !process.stdin.isTTY)
+const takeStdin = arg === '-' || (command === 'export' && arg === undefined && !process.stdin.isTTY)
 if ((command === 'export' || command === 'serve') && takeStdin) {
   const piped = Buffer.concat(await process.stdin.toArray()).toString('utf8')
   if (piped.trim().length > 0) {
