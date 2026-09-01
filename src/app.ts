@@ -7,7 +7,6 @@ import { probeGit, readHeadFile, type GitTrackedFile } from './git-source.js'
 import { imageContentType, resolveManuscriptFile } from './manuscript-path.js'
 import { toManuscript, type ManuscriptSource } from './manuscript.js'
 import { normalizeMarkdown, renderMarkdown, renderMarkdownPiece } from './markdown/render.js'
-import { splitSegments } from './markdown/segments.js'
 import { reloadJs } from './reload.js.js'
 import { documentSecurityMeta, previewSecureHeaders } from './security/headers.js'
 import { withImageSizes } from './typesetting/measure-images.js'
@@ -90,11 +89,7 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
   let gitProbe: Promise<GitTrackedFile | null> | undefined
 
   function gitSource(): Promise<GitTrackedFile | null> {
-    gitProbe ??= (async () => {
-      const file = manuscript.file
-      if (file === undefined) return null
-      return probeGit(file)
-    })()
+    gitProbe ??= manuscript.file === undefined ? Promise.resolve(null) : probeGit(manuscript.file)
     return gitProbe
   }
 
@@ -137,14 +132,6 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
 
   let cachedDiffKey = ''
   let cachedDiffHtml = ''
-  let cachedOldOid = ''
-  const cachedOldPieces = new Map<string, string>()
-
-  function renderDiffPiece(segment: string): string {
-    const hit = cachedOldPieces.get(segment)
-    if (hit !== undefined) return hit
-    return renderMarkdownPiece(segment)
-  }
 
   async function diffPage(markdown: string, git: GitTrackedFile): Promise<string | null> {
     const [version, head] = await Promise.all([versionOf(markdown), readHeadFile(git)])
@@ -153,20 +140,10 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
     const key = `${head.oid}:${version}`
     if (key === cachedDiffKey) return cachedDiffHtml
 
-    if (head.oid !== cachedOldOid) {
-      cachedOldPieces.clear()
-      cachedOldOid = head.oid
-    }
-    for (const segment of splitSegments(normalizeMarkdown(head.text))) {
-      if (!cachedOldPieces.has(segment)) {
-        cachedOldPieces.set(segment, renderMarkdownPiece(segment))
-      }
-    }
-
     const fragment = renderBlockDiff(
       normalizeMarkdown(head.text),
       normalizeMarkdown(markdown),
-      renderDiffPiece,
+      renderMarkdownPiece,
     )
     const sized = await withImageSizes(fragment, manuscript.root)
     const html = renderDocument(sized, {

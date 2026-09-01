@@ -62,18 +62,10 @@ export async function readHeadFile(tracked: GitTrackedFile): Promise<HeadBlob | 
   return { oid, text }
 }
 
-type ExecFile = typeof import('node:child_process').execFile
-
-let execFileFn: ExecFile | undefined
-
-function execFile(): ExecFile {
-  execFileFn ??= process.getBuiltinModule('node:child_process').execFile
-  return execFileFn
-}
-
 function git(cwd: string, args: readonly string[]): Promise<string | null> {
+  const { execFile } = process.getBuiltinModule('node:child_process')
   return new Promise((settle) => {
-    execFile()(
+    execFile(
       'git',
       args,
       {

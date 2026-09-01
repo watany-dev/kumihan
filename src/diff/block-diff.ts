@@ -7,19 +7,13 @@ export interface DiffOp {
   text: string
 }
 
-const BLANK_SEGMENT = /^\s*$/
-
-function isBlankSegment(segment: string): boolean {
-  return segment.length === 0 || BLANK_SEGMENT.test(segment)
-}
-
 /**
  * 旧区画と新区画の LCS。字面が完全一致したときだけ keep。
  * 空白だけの区画は列から落とす。
  */
 export function diffSegments(oldSegs: readonly string[], newSegs: readonly string[]): DiffOp[] {
-  const a = oldSegs.filter((segment) => !isBlankSegment(segment))
-  const b = newSegs.filter((segment) => !isBlankSegment(segment))
+  const a = oldSegs.filter((segment) => !/^\s*$/.test(segment))
+  const b = newSegs.filter((segment) => !/^\s*$/.test(segment))
   const n = a.length
   const m = b.length
   const dp: Uint32Array[] = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1))
