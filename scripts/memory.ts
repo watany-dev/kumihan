@@ -11,7 +11,7 @@ import { readFileSync } from 'node:fs'
 import { parseArgs } from 'node:util'
 import { Worker } from 'node:worker_threads'
 
-import { exportSite } from '../src/export/export-site.js'
+import { exportFiles } from '../src/export/export-site.js'
 import { renderMarkdown } from '../src/markdown/render.js'
 import { renderDocument } from '../src/typesetting/render-page.js'
 
@@ -39,12 +39,12 @@ let document = ''
 const stages: Stage[] = [
   { name: 'renderMarkdown', run: () => (fragment = renderMarkdown(manuscript)) },
   { name: 'renderDocument', run: () => (document = renderDocument(fragment, { mode: 'web' })) },
-  { name: 'exportSite (3 modes)', run: () => exportSite(manuscript) },
+  { name: 'exportFiles (3 modes)', run: () => exportFiles(renderMarkdown(manuscript)) },
   {
     name: 'writeExport (bytes)',
-    run: async () => {
-      const assets = exportSite(manuscript)
-      return Promise.all(assets.map(async (asset) => asset.response.arrayBuffer()))
+    run: () => {
+      const files = exportFiles(renderMarkdown(manuscript))
+      return files.map((file) => Buffer.byteLength(file.body))
     },
   },
 ]
