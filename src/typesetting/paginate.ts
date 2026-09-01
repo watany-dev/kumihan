@@ -671,27 +671,17 @@ function figureLines(block: string, layout: PageLayout): number {
   // 2段組の図版は段を抜くので、幅も版面いっぱいです。
   const widthMm = layout.columns > 1 ? layout.textWidthMm : layout.columnWidthMm
   // 画像は本文 1 行より低くても 1 行を取ります（地の文に混ざった画像と同じ）。
-  const drawn = imageLines(firstImageTag(block), widthMm, figureImageMaxLines(layout), layout)
-  const image = drawn > 1 ? drawn : 1
+  // 寸法を探す相手は図版の中の `<img>` 1 つだけです。キャプションの地の文は
+  // エスケープ済みで `"` を持てないので、`width="` に化けることはありません。
+  const image = Math.max(1, imageLines(block, widthMm, figureImageMaxLines(layout), layout))
 
   // キャプションの 1 行に入る幅。図版の幅ぶんの全角文字を、キャプションの
   // 級数に直したもの。頭の図番号は render-page.ts が書き入れるので、字数には
   // すでに入っています。
   const capacity = Math.max(FULL, (FULL * columnChars(widthMm, layout.bodyPoints)) / CAPTION_RATIO)
-  const counted = textRuns(captionOf(block), capacity)
-  const lines = counted.lines > 1 ? counted.lines : 1
+  const lines = Math.max(1, textRuns(captionOf(block), capacity).lines)
 
   return toLines(FIGURE_MARGIN_EM, layout.bodyPoints, layout) + image + captionLead(lines, layout)
-}
-
-/** 図版の中の `<img>`。無ければ空文字（高さは 1 行に落ちます）。 */
-function firstImageTag(block: string): string {
-  const start = block.indexOf('<img')
-  if (start === -1) {
-    return ''
-  }
-  const end = block.indexOf('>', start)
-  return end === -1 ? '' : block.slice(start, end + 1)
 }
 
 /** 図版のキャプション。`<figcaption>` が無ければ空文字。 */

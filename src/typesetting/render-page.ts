@@ -41,9 +41,6 @@ export interface RenderDocumentOptions {
  * 番号を出すかどうかは CSS が決めます（web.css は `.figure-number` を消します）。
  */
 function numberFigures(html: string): string {
-  if (!html.includes(CAPTION_OPEN)) {
-    return html
-  }
   let number = 0
   return html.replace(CAPTION, (found) => {
     number += 1

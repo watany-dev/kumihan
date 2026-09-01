@@ -224,10 +224,7 @@ body.web {
   height: auto;
 }
 
-/*
- * 図版は組版と同じ組み替え（figure + figcaption）で来ます。Web の記事では
- * 図番号を出さないので、::before は置きません。
- */
+/* 図版は組版と同じ組み替え（figure + figcaption）で来ます。 */
 .article figure {
   margin: 0 0 1.6em;
   text-align: center;

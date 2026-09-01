@@ -655,11 +655,8 @@ function parseParagraph(
  * 文字列をそのまま置くので、エスケープはそこで済んでいます（`"` は `&quot;`、
  * `<` は `&lt;`）。地の文に混ざった画像は段落のままです。
  *
- * 図番号は HTML に焼かず、CSS のカウンタが振ります（typeset.css）。番号を
- * ここで書くと、図が 1 つ増えるたびに後ろの区画をすべて変換し直すことになり、
- * 区画ごとの使い回し（増分変換）が効かなくなります。
- *
- * alt が空でも figcaption は出します。中身は空のまま、番号だけが付きます。
+ * alt が空でも figcaption は出します。中身は空のまま、図番号だけが付きます
+ *（番号を振るのは renderDocument です）。
  */
 function figure(html: string): string | null {
   // 画像は `<img src="..." alt="...">` の形で、属性値はエスケープ済みです。
@@ -667,18 +664,9 @@ function figure(html: string): string | null {
   if (!html.startsWith('<img ') || html.indexOf('>') !== html.length - 1) {
     return null
   }
-  return `<figure>${html}\n<figcaption>${altOf(html)}</figcaption></figure>`
-}
-
-function altOf(tag: string): string {
-  const start = tag.indexOf(' alt="')
-  /* v8 ignore next -- renderInline の <img> は必ず alt を持つ */
-  if (start === -1) return ''
-  const from = start + 6
-  const end = tag.indexOf('"', from)
-  /* v8 ignore next -- 属性値は必ず閉じる */
-  if (end === -1) return ''
-  return tag.slice(from, end)
+  // alt は renderInline が最後に書く属性なので、`">` の手前までが中身です。
+  const alt = html.slice(html.indexOf(' alt="') + 6, -2)
+  return `<figure>${html}\n<figcaption>${alt}</figcaption></figure>`
 }
 
 // ブロックを開始しうる先頭文字（水平線は字下げを許すため空白も含む）。
