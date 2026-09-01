@@ -165,6 +165,8 @@ function blocksOf(html: string, layout: PageLayout): CountCache & { blocks: stri
  * まるごと次の段へ送られ、空いた行がそのぶん無駄になります。段抜きの見出しや
  * コードも、その前後で段を分けます。空く行は原稿しだいで頁の 2 割にもなり、
  * 足し算だけの見積りでは埋め合わせられません。
+ *
+ * 紙を確定させる前に、末尾を見て泣き別れを直します（`withoutTrailingHeading`）。
  */
 export function paginate(html: string, layout: PageLayout): string[] {
   const { blocks, counts, flows } = blocksOf(html, layout)
@@ -172,14 +174,33 @@ export function paginate(html: string, layout: PageLayout): string[] {
     return ['']
   }
 
+  const pages: string[] = []
+  let start = 0
+  while (start < blocks.length) {
+    let end = pageEnd(counts, flows, start, layout)
+    // 最後の紙には送り先がありません。見出しだけの紙を作らないよう、そのまま置きます。
+    if (end < blocks.length) {
+      end = withoutTrailingHeading(flows, start, end)
+    }
+    pages.push(joinBlocks(blocks, start, end))
+    start = end
+  }
+
+  return pages
+}
+
+/**
+ * start から詰めて、次の紙へ回る最初のブロックの位置を返す。
+ * 全部入るなら blocks の数（= counts の数）。
+ */
+function pageEnd(
+  counts: readonly number[],
+  flows: readonly number[],
+  start: number,
+  layout: PageLayout,
+): number {
   const columns = layout.columns
   const columnLines = layout.lines / columns
-
-  // 頁は文字列のまま組み立てます。いったん string[][] に貯めてから join すると、
-  // 頁ごとの配列と、その中身をつないだ文字列を二重に持つことになります。
-  const pages: string[] = []
-  let current = ''
-  let empty = true
 
   // 段抜きは段組みを区切ります。closed は区切り済みの高さ、heights と kinds は
   // いま積んでいる区画のブロック。
@@ -187,45 +208,66 @@ export function paginate(html: string, layout: PageLayout): string[] {
   const kinds: number[] = []
   let closed = 0
 
-  for (let index = 0; index < blocks.length; index += 1) {
-    const block = blocks[index] ?? ''
+  for (let index = start; index < counts.length; index += 1) {
     const height = counts[index] ?? 1
     const flow = flows[index] ?? FLOW_NORMAL
 
-    if (flow === FLOW_SPAN) {
-      // 段抜きは区画を閉じ、その下に自分の高さぶんを取ります。
+    if (flow === FLOW_SPAN || flow === FLOW_SPAN_WITH_NEXT) {
+      // 段抜きは区画を閉じ、その下に自分の高さぶんを取ります。段を抜く見出しが
+      // 紙の末尾に来たときは、withoutTrailingHeading が次の紙へ送ります。
       const level = closed + regionHeight(heights, kinds, columns)
-      if (!empty && level + height > columnLines) {
-        pages.push(current)
-        current = ''
-        empty = true
-        closed = height
-      } else {
-        closed = level + height
+      if (index > start && level + height > columnLines) {
+        return index
       }
+      closed = level + height
       heights.length = 0
       kinds.length = 0
     } else {
       heights.push(height)
       kinds.push(flow)
-      if (!empty && !fitsInColumns(heights, kinds, columns, columnLines - closed)) {
-        pages.push(current)
-        current = ''
-        empty = true
-        closed = 0
-        heights.length = 0
-        kinds.length = 0
-        heights.push(height)
-        kinds.push(flow)
+      if (index > start && !fitsInColumns(heights, kinds, columns, columnLines - closed)) {
+        return index
       }
     }
-
-    current = empty ? block : `${current}\n${block}`
-    empty = false
   }
-  pages.push(current)
 
-  return pages
+  return counts.length
+}
+
+/**
+ * blocks の [from, to) を改行でつなぐ。
+ *
+ * `blocks.slice(from, to).join('\n')` なら 1 行ですが、紙ごとに配列を 1 つ捨てます。
+ * `content/index.md` の 40 倍（50 頁）で頁分けは 0.09ms から 0.16ms になり、
+ * 変換から組み上げまで（0.44ms）の 2 割近くを占めました。頁は文字列のまま積みます。
+ */
+function joinBlocks(blocks: readonly string[], from: number, to: number): string {
+  let page = blocks[from] ?? ''
+  for (let i = from + 1; i < to; i += 1) {
+    page += `\n${blocks[i]}`
+  }
+  return page
+}
+
+/**
+ * 紙の末尾に残った見出しを次の紙へ送る。
+ *
+ * 見出しは `break-after: avoid` ですが、頁を切っているのは CSS ではなく
+ * ここなので、紙に分けたあとでは働く余地がありません。詰め込みは見出しの
+ * 直後に 1 行ぶんの空きを取ってはいますが、続くのが 1 行では済まないブロック
+ * ——長い段落、表、コード——なら、そのブロックだけが次の紙へ回り、見出しが
+ * 紙の最終行に取り残されます。
+ *
+ * 見出しが続くとき（章の見出しと節の見出し）はまとめて送ります。ただし紙が
+ * 空になる送りはしません。送り先の紙も先頭から詰め直すので、送ったぶんが
+ * また末尾に来ることはありません。
+ */
+function withoutTrailingHeading(flows: readonly number[], start: number, end: number): number {
+  let last = end
+  while (last - 1 > start && keepsWithNext(flows[last - 1] ?? FLOW_NORMAL)) {
+    last -= 1
+  }
+  return last
 }
 
 /**
@@ -256,7 +298,7 @@ function fitsInColumns(
     const kind = kinds[i] ?? FLOW_NORMAL
     if (kind !== FLOW_NORMAL) {
       // 見出しは直後の 1 行も連れるので、そのぶんの空きも見ます。
-      const needed = kind === FLOW_KEEP_WITH_NEXT ? block + 1 : block
+      const needed = keepsWithNext(kind) ? block + 1 : block
       if (used > 0 && used + needed > height) {
         column += 1
         used = 0
@@ -641,6 +683,13 @@ const FLOW_KEEP = 1
 const FLOW_KEEP_WITH_NEXT = 2
 /** すべての段を横切る（`column-span: all`）。 */
 const FLOW_SPAN = 3
+/** すべての段を横切り、直後の 1 行も連れる（段を抜く見出し）。 */
+const FLOW_SPAN_WITH_NEXT = 4
+
+/** 直後の 1 行と離れられないブロック（`break-after: avoid` の見出し）か。 */
+function keepsWithNext(flow: number): boolean {
+  return flow === FLOW_KEEP_WITH_NEXT || flow === FLOW_SPAN_WITH_NEXT
+}
 
 /**
  * typeset.css の break-inside / break-after / column-span を、
@@ -650,7 +699,7 @@ function flowOf(tag: string, block: string, previousTag: string, layout: PageLay
   const spans = layout.columns > 1
   switch (tag) {
     case 'h1':
-      return spans ? FLOW_SPAN : FLOW_KEEP_WITH_NEXT
+      return spans ? FLOW_SPAN_WITH_NEXT : FLOW_KEEP_WITH_NEXT
     case 'h2':
     case 'h3':
       return FLOW_KEEP_WITH_NEXT
