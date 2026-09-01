@@ -8,6 +8,7 @@ import {
   PRINT_LAYOUT,
   type PageLayout,
   paginate,
+  splitBlocks,
 } from '../src/typesetting/paginate.js'
 import { renderDocument, type PreviewMode } from '../src/typesetting/render-page.js'
 
@@ -178,6 +179,35 @@ describe('typesetting fuzzing', () => {
         if (textOnly(html).length > 0) {
           const body = document.slice(document.indexOf('<body'))
           assert.ok(textOnly(body).length > 0, `${mode}: 本文が消えた。${context}`)
+        }
+      }
+    }
+  })
+
+  // v0.2.0-preview のあとに入った、実寸の図と泣き別れの送り（#34 / #35）。
+  it('never leaves a heading alone at the foot of a paper', () => {
+    for (let seed = 1; seed <= 2000; seed += 1) {
+      const rand = mulberry32(seed * 1103515245)
+      // measure-images.ts が入れるのと同じ形で寸法を足します。図の高さは
+      // ここではじめて分かるので、頁の詰まり方が変わります。
+      const html = renderMarkdown(generate(seed * 1103515245)).replace(/<img\b[^>]*>/g, (tag) => {
+        if (rand() < 0.25) return tag
+        const width = [1, 16, 320, 1200, 4000][Math.floor(rand() * 5)] ?? 1
+        const height = [1, 9, 240, 900, 3000][Math.floor(rand() * 5)] ?? 1
+        return `${tag.slice(0, -1)} width="${width}" height="${height}">`
+      })
+
+      for (const size of SIZES) {
+        const pages = paginate(html, size)
+        // 送り先のある紙は、見出しだけを残して終わらない。ブロックが 1 つ
+        // しかない紙は、送ると紙が空になるのでそのまま置く。
+        for (let i = 0; i < pages.length - 1; i += 1) {
+          const blocks = splitBlocks(pages[i] ?? '')
+          const last = /^<(h1|h2|h3)\b/.exec(blocks.at(-1) ?? '')
+          assert.ok(
+            blocks.length <= 1 || last === null,
+            `seed ${seed} / ${size.lines} 行: 頁 ${i + 1} が ${last?.[1]} で終わる`,
+          )
         }
       }
     }

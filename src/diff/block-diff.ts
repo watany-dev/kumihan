@@ -8,15 +8,59 @@ export interface DiffOp {
   text: string
 }
 
+function keep(text: string): DiffOp {
+  return { kind: 'keep', text }
+}
+
 /**
  * 旧区画と新区画の LCS。字面が完全一致したときだけ keep。
  * 空白だけの区画は列から落とす。
+ *
+ * 表は区画数の積だけ場所を取るので、そのまま組むと大きな原稿で潰れます
+ * （区画 2 万どうしで 1.7GB・12 秒。プレビューは差分の GET 1 回で死にます）。
+ * 前後の一致を先に外し、残りが大きすぎるときは「まるごと入れ替え」に倒します。
  */
 export function diffSegments(oldSegs: readonly string[], newSegs: readonly string[]): DiffOp[] {
   const a = oldSegs.filter((segment) => !/^\s*$/.test(segment))
   const b = newSegs.filter((segment) => !/^\s*$/.test(segment))
+
+  // 保存のたびに走る差分では、変わるのはふつう 1 区画です。前後の一致を
+  // 外すだけで、表はその 1 区画ぶんに縮みます。
+  let head = 0
+  while (head < a.length && head < b.length && a[head] === b[head]) {
+    head += 1
+  }
+  let tail = 0
+  while (
+    tail < a.length - head &&
+    tail < b.length - head &&
+    a[a.length - 1 - tail] === b[b.length - 1 - tail]
+  ) {
+    tail += 1
+  }
+
+  return [
+    ...a.slice(0, head).map(keep),
+    ...middleOps(a.slice(head, a.length - tail), b.slice(head, b.length - tail)),
+    ...b.slice(b.length - tail).map(keep),
+  ]
+}
+
+/**
+ * 表に使ってよい升目の数。1 升 4 バイトなので、ここまでで 16MB・50ms ほど。
+ * 超える書き換えは、共通の並びを探さずに「旧を消して新を置く」とします。
+ */
+const LCS_CELLS = 4_000_000
+
+function middleOps(a: readonly string[], b: readonly string[]): DiffOp[] {
   const n = a.length
   const m = b.length
+  if (n === 0 || m === 0 || (n + 1) * (m + 1) > LCS_CELLS) {
+    return [
+      ...a.map((text): DiffOp => ({ kind: 'del', text })),
+      ...b.map((text): DiffOp => ({ kind: 'add', text })),
+    ]
+  }
   const dp: Uint32Array[] = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1))
 
   for (let i = 1; i <= n; i += 1) {
@@ -89,19 +133,40 @@ export function renderBlockDiff(
   newNormalized: string,
   renderPiece: (segment: string) => string,
 ): string {
+  const older = splitSegments(oldNormalized).filter(hasContent)
+  const newer = splitSegments(newNormalized).filter(hasContent)
   return htmlFromOps(
-    diffSegments(
-      splitSegments(oldNormalized).map(trimSegment),
-      splitSegments(newNormalized).map(trimSegment),
-    ),
+    diffSegments(older.map(trimSegment), newer.map(trimSegment)),
+    older,
+    newer,
     renderPiece,
   )
 }
 
-function htmlFromOps(ops: readonly DiffOp[], renderPiece: (segment: string) => string): string {
+function hasContent(segment: string): boolean {
+  return !/^\s*$/.test(segment)
+}
+
+/**
+ * 比べたのは末尾の `\n` を落とした字面ですが、組むのは元の区画です。
+ * 閉じていないフェンスでは、その `\n` がコードの中身の一部なので、落とした
+ * ままだと差分ビューの最後のコードブロックが通常プレビューより 1 行短く
+ * なります。keep と add は今の原稿から、del は HEAD の原稿から取ります。
+ */
+function htmlFromOps(
+  ops: readonly DiffOp[],
+  older: readonly string[],
+  newer: readonly string[],
+  renderPiece: (segment: string) => string,
+): string {
   let html = ''
+  let from = 0
+  let to = 0
   for (const op of ops) {
-    const piece = renderPiece(op.text)
+    const text = op.kind === 'del' ? (older[from] ?? op.text) : (newer[to] ?? op.text)
+    if (op.kind !== 'add') from += 1
+    if (op.kind !== 'del') to += 1
+    const piece = renderPiece(text)
     if (piece.length === 0) continue
     if (op.kind === 'keep') {
       html = appendHtml(html, piece)
