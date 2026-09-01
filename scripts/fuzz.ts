@@ -23,15 +23,20 @@
  *   segment   区画分け（`segments.ts`）と、区画単位の変換の一致
  *   diff      区画差分（`block-diff.ts`）
  *   document  ノンブル・柱つきの組み上げ（`render-page.ts`）
+ *   export    静的 HTML の書き出しと画像の複製（`write-files.ts`。実ファイル）
  *   http      差分ビューを含むプレビューの経路（実際の git リポジトリで）
  */
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { readFileSync } from 'node:fs'
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, relative, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 
 import { createPreviewApp } from '../src/app.js'
 import { diffSegments, renderBlockDiff } from '../src/diff/block-diff.js'
+import { writeExport } from '../src/export/write-files.js'
+import { contained, resolveManuscriptFile } from '../src/manuscript-path.js'
+import { unescapeHtml } from '../src/markdown/escape.js'
 import {
   normalizeMarkdown,
   renderMarkdown,
@@ -1278,6 +1283,147 @@ function looksSvg(bytes: Uint8Array): boolean {
   return bytes[0] === 0x3c
 }
 
+/** 出力先にあるファイルを、出力先からの相対パスで集める。 */
+async function outputFiles(dir: string): Promise<string[]> {
+  const entries = await readdir(dir, { recursive: true, withFileTypes: true })
+  return entries
+    .filter((entry) => entry.isFile())
+    .map((entry) => join(entry.parentPath, entry.name).slice(dir.length + 1))
+}
+
+// 書き出しが触ってよいのは出力先の中だけです。原稿の外を指す参照や、名前に
+// 実体参照・符号化・空白の入った画像を混ぜて、複製の行き先を確かめます。
+const EXPORT_IMAGES = ['fig.png', 'a&b.png', "a'b.svg", 'あ 図.jpg', 'sub/dir/x.webp', '%41.gif']
+const EXPORT_REFERENCES = [
+  ...EXPORT_IMAGES,
+  './fig.png',
+  '../outside.png',
+  'sub/../fig.png',
+  'no-such.png',
+  'https://example.com/x.png',
+  'data:image/png;base64,AAAA',
+  '#',
+  '',
+]
+
+async function fuzzExport(failures: Failures, base: number, cases: number): Promise<void> {
+  const root = await mkdtemp(join(tmpdir(), 'kumihan-fuzz-export-'))
+  const outRoot = await mkdtemp(join(tmpdir(), 'kumihan-fuzz-export-out-'))
+  const source = join(root, 'index.md')
+  // 読めない画像や原稿の外を指す参照は、書き出しが console.error に控えます。
+  // ここでは失敗ではないので、走らせているあいだは黙らせます。
+  const reportError = console.error
+  console.error = () => {}
+  try {
+    await mkdir(join(root, 'sub', 'dir'), { recursive: true })
+    await writeFile(join(root, '..', 'outside.png'), new Uint8Array(PNG_SIGNATURE))
+
+    for (let n = 0; n < cases; n += 1) {
+      const seed = base + n
+      const rand = mulberry32(seed * 2654435761 + 31)
+
+      // 画像は毎回置き直します。無い名前も混ぜたいので、置くのは一部だけ。
+      for (const name of EXPORT_IMAGES) {
+        if (rand() < 0.3) continue
+        await writeFile(join(root, name), rand() < 0.5 ? knownImage(rand).bytes : imageBytes(rand))
+      }
+
+      const references = Array.from({ length: 1 + upto(rand, 4) }, () =>
+        pick(rand, EXPORT_REFERENCES),
+      )
+      const markdown = `${manuscript(rand, 10)}\n\n${references
+        .map((reference) => `![図](${reference})`)
+        .join('\n\n')}\n`
+      await writeFile(source, markdown)
+
+      const out = join(outRoot, `case${n % 8}`)
+      await rm(out, { recursive: true, force: true })
+      try {
+        const written = await writeExport(source, out)
+
+        // 書き出す一式は必ずそろいます。
+        for (const name of [
+          'index.html',
+          'magazine.html',
+          'web.html',
+          join('assets', 'typeset.css'),
+          join('assets', 'web.css'),
+        ]) {
+          failures.check(
+            written.includes(join(out, name)),
+            'export/files',
+            seed,
+            () => `${name} が書き出しに無い`,
+          )
+        }
+
+        // 触った先はすべて出力先の中。原稿の外を指す参照は複製しません。
+        for (const path of written) {
+          failures.check(contained(out, path), 'export/outside', seed, () => path)
+        }
+        const files = await outputFiles(out)
+        failures.check(!files.includes('outside.png'), 'export/escape', seed, () => files.join(','))
+
+        // 断片の `<img>` のうち、原稿の下の画像を指すものは書き出しにも入ります。
+        // 名前は HTML の実体参照と URL 符号化をくぐるので、戻し方がずれると
+        // 「プレビューには映るのに書き出しに無い」になります。
+        resetRenderCache()
+        for (const tag of renderMarkdown(markdown).matchAll(/<img src="([^"]*)"/g)) {
+          const src = unescapeHtml(tag[1] ?? '')
+          if ((await resolveManuscriptFile(root, src)) === null) continue
+          // 書き出し先は `./fig.png` も `sub/../fig.png` も同じ場所です。
+          const name = relative(out, resolve(out, decodeURIComponent(src)))
+          failures.check(
+            files.includes(name),
+            'export/image',
+            seed,
+            () => `${name} が書き出しに無い / ${files.join(',')}`,
+          )
+        }
+
+        const pages = ['index.html', 'magazine.html', 'web.html'].map((name) =>
+          readFileSync(join(out, name), 'utf8'),
+        )
+        for (const [at, page] of pages.entries()) {
+          failures.check(unbalanced(page).length === 0, 'export/unbalanced', seed, () =>
+            unbalanced(page).slice(0, 3).join(','),
+          )
+          // 書き出しに自動リロードは入りません（CSP も script-src 'none'）。
+          failures.check(
+            !page.includes('<script'),
+            'export/script',
+            seed,
+            () => `${at}: ${page.slice(0, 160)}`,
+          )
+        }
+        // 3 つの見た目は同じ断片から組みます。地の文は同じ。
+        failures.check(
+          new Set(pages.map((page) => textOnly(articles(page).join('')))).size === 1,
+          'export/text',
+          seed,
+          () => JSON.stringify(markdown.slice(0, 160)),
+        )
+
+        // もう一度書き出しても、同じ一式になります。
+        const again = await writeExport(source, out)
+        failures.check(
+          again.join('\n') === written.join('\n'),
+          'export/repeat',
+          seed,
+          () => `${written.length} → ${again.length}`,
+        )
+      } catch (error) {
+        failures.check(false, 'export/throw', seed, () => String(error).slice(0, 300))
+      }
+    }
+  } finally {
+    console.error = reportError
+    await rm(join(root, '..', 'outside.png'), { force: true })
+    await rm(root, { recursive: true, force: true })
+    await rm(outRoot, { recursive: true, force: true })
+  }
+}
+
 async function fuzzHttp(failures: Failures, base: number, cases: number): Promise<void> {
   const { execFile } = process.getBuiltinModule('node:child_process')
   const run = (cwd: string, args: string[]): Promise<void> =>
@@ -1402,6 +1548,7 @@ const CATEGORIES: Category[] = [
   { name: 'diff', share: 0.13, run: fuzzDiff },
   { name: 'document', share: 0.07, run: fuzzDocument },
   { name: 'measure', share: 0.005, run: fuzzMeasure },
+  { name: 'export', share: 0.005, run: fuzzExport },
   { name: 'http', share: 0.005, run: fuzzHttp },
 ]
 
