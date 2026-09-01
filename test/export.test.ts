@@ -5,7 +5,7 @@ import { join, resolve } from 'node:path'
 
 import { describe, it } from 'vite-plus/test'
 
-import { exportSite } from '../src/export/export-site.js'
+import { exportFiles } from '../src/export/export-site.js'
 import { writeExport } from '../src/export/write-files.js'
 import { contained } from '../src/manuscript-path.js'
 import { memoryManuscript } from '../src/manuscript.js'
@@ -28,10 +28,10 @@ const sample = `# 見出し
 [bad](javascript:alert(1))
 `
 
-describe('exportSite', () => {
-  it('emits print, magazine, and web html with matching stylesheets', async () => {
-    const assets = exportSite(sample)
-    const paths = assets.map((asset) => asset.pathname)
+describe('exportFiles', () => {
+  it('emits print, magazine, and web html with matching stylesheets', () => {
+    const files = exportFiles(renderMarkdown(sample))
+    const paths = files.map((file) => file.pathname)
     assert.deepEqual(paths, [
       '/index.html',
       '/magazine.html',
@@ -44,33 +44,32 @@ describe('exportSite', () => {
       false,
     )
 
-    const index = assets[0]
-    const magazine = assets[1]
-    const web = assets[2]
-    const css = assets[3]
-    const webStyles = assets[4]
+    const index = files[0]
+    const magazine = files[1]
+    const web = files[2]
+    const css = files[3]
+    const webStyles = files[4]
     assert.ok(index)
     assert.ok(magazine)
     assert.ok(web)
     assert.ok(css)
     assert.ok(webStyles)
 
-    assert.equal(index.response.headers.get('Content-Type'), 'text/html; charset=utf-8')
-    assert.equal(magazine.response.headers.get('Content-Type'), 'text/html; charset=utf-8')
-    assert.equal(web.response.headers.get('Content-Type'), 'text/html; charset=utf-8')
-    assert.equal(css.response.headers.get('Content-Type'), 'text/css; charset=utf-8')
-    assert.equal(webStyles.response.headers.get('Content-Type'), 'text/css; charset=utf-8')
-    assert.equal(await css.response.text(), typesetCss)
-    assert.equal(await webStyles.response.text(), webCss)
-    const webHtml = await web.response.text()
-    assert.equal((webHtml.match(/class="mode-switch-link/g) ?? []).length, 3)
-    assert.equal(webHtml.includes('差分'), false)
-    assert.equal(webHtml.includes('diff.html'), false)
+    assert.equal(index.contentType, 'text/html; charset=utf-8')
+    assert.equal(magazine.contentType, 'text/html; charset=utf-8')
+    assert.equal(web.contentType, 'text/html; charset=utf-8')
+    assert.equal(css.contentType, 'text/css; charset=utf-8')
+    assert.equal(webStyles.contentType, 'text/css; charset=utf-8')
+    assert.equal(css.body, typesetCss)
+    assert.equal(webStyles.body, webCss)
+    assert.equal((web.body.match(/class="mode-switch-link/g) ?? []).length, 3)
+    assert.equal(web.body.includes('差分'), false)
+    assert.equal(web.body.includes('diff.html'), false)
   })
 
-  it('uses the same renderer as preview', async () => {
+  it('uses the same renderer as preview', () => {
     const fragment = renderMarkdown(sample)
-    const assets = exportSite(sample)
+    const files = exportFiles(fragment)
     const expected = {
       '/index.html': renderDocument(fragment),
       '/magazine.html': renderDocument(fragment, { mode: 'magazine' }),
@@ -78,43 +77,40 @@ describe('exportSite', () => {
     } as const
 
     for (const [pathname, preview] of Object.entries(expected)) {
-      const asset = assets.find((item) => item.pathname === pathname)
-      assert.ok(asset)
-      assert.equal(await asset.response.text(), preview)
+      const file = files.find((item) => item.pathname === pathname)
+      assert.ok(file)
+      assert.equal(file.body, preview)
     }
   })
 
-  it('forwards document options into the exported HTML', async () => {
-    const assets = exportSite('# Title', { title: 'Exported', language: 'en' })
-    const index = assets.find((asset) => asset.pathname === '/index.html')
+  it('forwards document options into the exported HTML', () => {
+    const files = exportFiles(renderMarkdown('# Title'), { title: 'Exported', language: 'en' })
+    const index = files.find((file) => file.pathname === '/index.html')
     assert.ok(index)
-    const html = await index.response.text()
-    assert.match(html, /<html lang="en">/)
-    assert.match(html, /<title>Exported<\/title>/)
-    const magazine = assets.find((asset) => asset.pathname === '/magazine.html')
+    assert.match(index.body, /<html lang="en">/)
+    assert.match(index.body, /<title>Exported<\/title>/)
+    const magazine = files.find((file) => file.pathname === '/magazine.html')
     assert.ok(magazine)
-    const magazineHtml = await magazine.response.text()
-    assert.match(magazineHtml, /<html lang="en">/)
-    assert.match(magazineHtml, /<article class="typeset cols-2">/)
-    const web = assets.find((asset) => asset.pathname === '/web.html')
+    assert.match(magazine.body, /<html lang="en">/)
+    assert.match(magazine.body, /<article class="typeset cols-2">/)
+    const web = files.find((file) => file.pathname === '/web.html')
     assert.ok(web)
-    const webHtml = await web.response.text()
-    assert.match(webHtml, /<html lang="en">/)
-    assert.match(webHtml, /<title>Exported<\/title>/)
-    assert.match(webHtml, /<body class="web">/)
+    assert.match(web.body, /<html lang="en">/)
+    assert.match(web.body, /<title>Exported<\/title>/)
+    assert.match(web.body, /<body class="web">/)
   })
 
-  it('always emits every mode even if a mode option is passed', async () => {
-    const assets = exportSite('# Title', { mode: 'web' })
-    const index = assets.find((asset) => asset.pathname === '/index.html')
-    const magazine = assets.find((asset) => asset.pathname === '/magazine.html')
-    const web = assets.find((asset) => asset.pathname === '/web.html')
+  it('always emits every mode even if a mode option is passed', () => {
+    const files = exportFiles(renderMarkdown('# Title'), { mode: 'web' })
+    const index = files.find((file) => file.pathname === '/index.html')
+    const magazine = files.find((file) => file.pathname === '/magazine.html')
+    const web = files.find((file) => file.pathname === '/web.html')
     assert.ok(index)
     assert.ok(magazine)
     assert.ok(web)
-    assert.match(await index.response.text(), /<article class="typeset">/)
-    assert.match(await magazine.response.text(), /<article class="typeset cols-2">/)
-    assert.match(await web.response.text(), /<body class="web">/)
+    assert.match(index.body, /<article class="typeset">/)
+    assert.match(magazine.body, /<article class="typeset cols-2">/)
+    assert.match(web.body, /<body class="web">/)
   })
 })
 

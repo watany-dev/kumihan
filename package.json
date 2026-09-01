@@ -13,17 +13,14 @@
     "check": "vp check",
     "cli": "bun src/cli.ts",
     "compile": "bun scripts/compile.ts",
-    "dev": "bun src/server.ts",
-    "export": "bun scripts/export.ts",
+    "dev": "bun src/cli.ts serve",
+    "export": "bun src/cli.ts export",
     "fmt": "vp fmt",
     "fuzz": "bun scripts/fuzz.ts",
     "knip": "knip",
     "lint": "vp lint",
     "test": "vp test",
     "test:coverage": "vp test --coverage"
-  },
-  "dependencies": {
-    "hono": "4.13.5"
   },
   "devDependencies": {
     "@types/node": "22.19.21",

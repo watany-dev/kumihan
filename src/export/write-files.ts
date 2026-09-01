@@ -13,7 +13,7 @@ export async function writeExport(source: ManuscriptSource, outDir: string): Pro
   const markdown = await manuscript.read()
 
   // 断片は HTML の組み立てと画像の収集の両方で使うので、変換は 1 回だけに
-  // します。以前は exportSite と画像の走査が別々に renderMarkdown を呼んで
+  // します。以前は書き出しと画像の走査が別々に renderMarkdown を呼んで
   // いて、書き出しで最も重い段階が原稿全体に対して丸ごと 2 回走っていました。
   // 画像の実寸を書き入れてから組みます。頁分けが図の高さを見積もれるように
   // なり、書き出した HTML はブラウザが読み込む前に図の場所を空けられます。

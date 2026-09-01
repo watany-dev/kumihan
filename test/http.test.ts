@@ -118,6 +118,31 @@ describe('preview security headers', () => {
     assert.equal(responses.length, 15)
   })
 
+  it('answers HEAD with the same headers and no body', async () => {
+    const app = createPreviewApp({ source: './content/index.md' })
+    const get = await app.request('/health')
+    const head = await app.request('/health', { method: 'HEAD' })
+    assert.equal(get.status, 200)
+    assert.equal(head.status, 200)
+    assert.equal(await head.text(), '')
+    assert.deepEqual(await get.json(), { ok: true })
+    assertSecurityHeaders(head.headers)
+    assert.equal(head.headers.get('Content-Type'), get.headers.get('Content-Type'))
+  })
+
+  it('does not treat a missing /events version query as a stale client', async () => {
+    const app = createPreviewApp({ source: './content/index.md' })
+    const res = await app.request('/events')
+    assert.equal(res.status, 200)
+    assert.ok(res.body)
+    const reader = res.body.getReader()
+    const first = await reader.read()
+    const text = new TextDecoder().decode(first.value)
+    assert.match(text, /^retry: 500\n\n/)
+    assert.equal(text.includes('data:'), false)
+    await reader.cancel()
+  })
+
   it('sets security headers on error pages', async () => {
     const app = createPreviewApp({ source: './content/does-not-exist.md' })
     const res = await app.request('/')

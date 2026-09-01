@@ -13,6 +13,5 @@ minimumReleaseAgeExcludes = [
   "@voidzero-dev/vite-plus-linux-x64-musl",
   "@voidzero-dev/vite-plus-win32-arm64-msvc",
   "@voidzero-dev/vite-plus-win32-x64-msvc",
-  "hono",
   "@types/node",
 ]

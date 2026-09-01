@@ -1,12 +1,6 @@
-import { renderMarkdown } from '../markdown/render.js'
 import { renderDocument, type RenderDocumentOptions } from '../typesetting/render-page.js'
 import { typesetCss } from '../typesetting/typeset.css.js'
 import { webCss } from '../typesetting/web.css.js'
-
-export interface StaticAsset {
-  pathname: string
-  response: Response
-}
 
 /** 書き出す 1 ファイル。本文は文字列のまま持ちます。 */
 export interface ExportFile {
@@ -53,15 +47,4 @@ export function exportFiles(fragment: string, options?: RenderDocumentOptions): 
       contentType: CSS_TYPE,
     },
   ]
-}
-
-export function exportSite(markdown: string, options?: RenderDocumentOptions): StaticAsset[] {
-  return exportFiles(renderMarkdown(markdown), options).map((file) => ({
-    pathname: file.pathname,
-    response: new Response(file.body, {
-      headers: {
-        'Content-Type': file.contentType,
-      },
-    }),
-  }))
 }

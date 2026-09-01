@@ -1,44 +1,41 @@
-import { secureHeaders } from 'hono/secure-headers'
-
-// CSP は 2 通りあります。プレビューは自動リロード用のスクリプト 1 本と
-// EventSource を使うので `script-src 'self'` / `connect-src 'self'`、
-// export した静的 HTML はスクリプトを含まないので `'none'` のままです。
+// CSP は 1 つのディレクティブ表から作ります。プレビューは自動リロード用の
+// スクリプト 1 本と EventSource を使うので `script-src` / `connect-src` だけ
+// `'self'`、export した静的 HTML はスクリプトを含まないので `'none'` のままです。
 // インライン・属性のスクリプトはどちらも通しません。
-const EXPORT_CSP = [
-  "default-src 'none'",
-  "base-uri 'none'",
-  "form-action 'none'",
-  "frame-ancestors 'none'",
-  "script-src 'none'",
-  "script-src-attr 'none'",
-  "style-src 'self'",
-  "img-src 'self' https: http:",
-  "font-src 'none'",
-  "connect-src 'none'",
-  "object-src 'none'",
-  "media-src 'none'",
-  "worker-src 'none'",
-  "manifest-src 'none'",
-].join('; ')
+const CSP_DIRECTIVES: ReadonlyArray<readonly [name: string, value: string]> = [
+  ['default-src', "'none'"],
+  ['base-uri', "'none'"],
+  ['form-action', "'none'"],
+  ['frame-ancestors', "'none'"],
+  ['script-src', "'none'"],
+  ['script-src-attr', "'none'"],
+  ['style-src', "'self'"],
+  ['img-src', "'self' https: http:"],
+  ['font-src', "'none'"],
+  ['connect-src', "'none'"],
+  ['object-src', "'none'"],
+  ['media-src', "'none'"],
+  ['worker-src', "'none'"],
+  ['manifest-src', "'none'"],
+]
 
-const PREVIEW_CSP = EXPORT_CSP.replace("script-src 'none'", "script-src 'self'").replace(
-  "connect-src 'none'",
-  "connect-src 'self'",
-)
-
-const REFERRER_POLICY = 'no-referrer'
-
-// frame-ancestors is ignored in <meta>; keep it on the HTTP header only.
-function metaCsp(policy: string): string {
-  return policy
-    .split('; ')
-    .filter((directive) => !directive.startsWith('frame-ancestors'))
-    .join('; ')
+function contentSecurityPolicy(context: 'export' | 'preview', forMeta: boolean): string {
+  const parts: string[] = []
+  for (const [name, value] of CSP_DIRECTIVES) {
+    // frame-ancestors は <meta> では無視されるので、HTTP ヘッダにだけ残す。
+    if (forMeta && name === 'frame-ancestors') continue
+    const resolved =
+      context === 'preview' && (name === 'script-src' || name === 'connect-src') ? "'self'" : value
+    parts.push(`${name} ${resolved}`)
+  }
+  return parts.join('; ')
 }
 
-// 内容は定数なので、リクエストごとに組み立て直さない。
-const EXPORT_SECURITY_META = securityMeta(metaCsp(EXPORT_CSP))
-const PREVIEW_SECURITY_META = securityMeta(metaCsp(PREVIEW_CSP))
+const PREVIEW_CSP = contentSecurityPolicy('preview', false)
+const REFERRER_POLICY = 'no-referrer'
+
+const EXPORT_SECURITY_META = securityMeta(contentSecurityPolicy('export', true))
+const PREVIEW_SECURITY_META = securityMeta(contentSecurityPolicy('preview', true))
 
 function securityMeta(policy: string): string {
   return `  <meta http-equiv="Content-Security-Policy" content="${policy}">
@@ -49,36 +46,31 @@ export function documentSecurityMeta(context: 'export' | 'preview' = 'export'): 
   return context === 'preview' ? PREVIEW_SECURITY_META : EXPORT_SECURITY_META
 }
 
-export function previewSecureHeaders() {
-  return secureHeaders({
-    contentSecurityPolicy: {
-      defaultSrc: ["'none'"],
-      baseUri: ["'none'"],
-      formAction: ["'none'"],
-      frameAncestors: ["'none'"],
-      scriptSrc: ["'self'"],
-      scriptSrcAttr: ["'none'"],
-      styleSrc: ["'self'"],
-      imgSrc: ["'self'", 'https:', 'http:'],
-      fontSrc: ["'none'"],
-      connectSrc: ["'self'"],
-      objectSrc: ["'none'"],
-      mediaSrc: ["'none'"],
-      workerSrc: ["'none'"],
-      manifestSrc: ["'none'"],
-    },
-    xFrameOptions: 'DENY',
-    referrerPolicy: REFERRER_POLICY,
-    permissionsPolicy: {
-      accelerometer: false,
-      camera: false,
-      geolocation: false,
-      gyroscope: false,
-      magnetometer: false,
-      microphone: false,
-      payment: false,
-      usb: false,
-      fullscreen: ['self'],
-    },
-  })
+// 内容は定数なので、リクエストごとに組み立て直さない。以前 hono/secure-headers
+// が既定で足していたヘッダも含め、プレビューの応答契約をここに揃える。
+const PREVIEW_HEADERS: ReadonlyArray<readonly [name: string, value: string]> = [
+  ['Content-Security-Policy', PREVIEW_CSP],
+  ['Referrer-Policy', REFERRER_POLICY],
+  ['X-Content-Type-Options', 'nosniff'],
+  ['X-Frame-Options', 'DENY'],
+  ['Cross-Origin-Resource-Policy', 'same-origin'],
+  ['Cross-Origin-Opener-Policy', 'same-origin'],
+  ['Origin-Agent-Cluster', '?1'],
+  ['Strict-Transport-Security', 'max-age=15552000; includeSubDomains'],
+  ['X-DNS-Prefetch-Control', 'off'],
+  ['X-Download-Options', 'noopen'],
+  ['X-Permitted-Cross-Domain-Policies', 'none'],
+  ['X-XSS-Protection', '0'],
+  [
+    'Permissions-Policy',
+    'accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=(), fullscreen=(self)',
+  ],
+]
+
+export function withPreviewHeaders(response: Response): Response {
+  const headers = new Headers(response.headers)
+  for (const [name, value] of PREVIEW_HEADERS) {
+    headers.set(name, value)
+  }
+  return new Response(response.body, { status: response.status, headers })
 }

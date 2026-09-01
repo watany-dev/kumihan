@@ -29,7 +29,7 @@ try {
       help: { type: 'boolean', short: 'h', default: false },
       version: { type: 'boolean', short: 'v', default: false },
       port: { type: 'string', short: 'p', default: '3000' },
-      host: { type: 'string', short: 'H', default: '127.0.0.1' },
+      host: { type: 'string', short: 'H', default: process.env['KUMIHAN_HOST'] ?? '127.0.0.1' },
       out: { type: 'string', short: 'o', default: 'dist' },
     },
   })
@@ -53,13 +53,14 @@ const command = positionals[0]
 const arg = positionals[1]
 const source = arg ?? 'content/index.md'
 
-// `-` なら必ず標準入力。省略時も、端末以外（パイプやリダイレクト）が
-// つながっていれば読みます。
+// `-` なら必ず標準入力。export は引数省略時も、端末以外（パイプや
+// リダイレクト）がつながっていれば読みます。serve は `-` を明示した
+// ときだけ読む。そうしないと `bun run dev` を端末以外から起動したとき、
+// 閉じない標準入力で待ち受けまで届かない。
 let manuscript: ManuscriptSource = source
-if (
-  (command === 'export' || command === 'serve') &&
-  (arg === '-' || (arg === undefined && !process.stdin.isTTY))
-) {
+const takeStdin =
+  arg === '-' || (command === 'export' && arg === undefined && !process.stdin.isTTY)
+if ((command === 'export' || command === 'serve') && takeStdin) {
   const piped = Buffer.concat(await process.stdin.toArray()).toString('utf8')
   if (piped.trim().length > 0) {
     manuscript = memoryManuscript(piped)
@@ -67,8 +68,8 @@ if (
     console.error('標準入力が空です')
     process.exit(1)
   }
-  // 省略時に何も流れてこなかった場合は、端末以外につながっているだけの
-  // 起動（CI やサービス経由）とみなして既定の原稿に戻します。
+  // export の省略時に何も流れてこなかった場合は、端末以外につながっている
+  // だけの起動（CI）とみなして既定の原稿に戻します。
 }
 
 if (command === 'export') {
@@ -111,7 +112,7 @@ if (command === 'export') {
     process.exit(1)
   })
   server.listen(port, host, () => {
-    const shown = host === '0.0.0.0' ? '127.0.0.1' : host
+    const shown = host === '0.0.0.0' || host === '::' ? '127.0.0.1' : host
     console.log(`Typeset preview: http://${shown}:${port}`)
     console.log(`Two-column preview: http://${shown}:${port}/magazine.html`)
     console.log(`Web article preview: http://${shown}:${port}/web.html`)

@@ -1,15 +1,20 @@
 import type { OutgoingHttpHeaders, Server } from 'node:http'
 
-import type { Hono } from 'hono'
-
 import { AUTHORITY, isAllowedHost, LOOPBACK_HOST_POLICY, type HostPolicy } from './security/host.js'
+
+interface FetchApp {
+  fetch(request: Request): Promise<Response>
+}
 
 // node:http は Node 互換レイヤの中でも初期化が重く、読み込むだけで起動が
 // 20ms ほど延びます（実測）。使うのは serve のときだけなので、モジュールの
 // import ではなくここで取り出し、export や --version が代金を払わないように
 // します。static import に戻すと、バンドラがモジュールグラフに含めてしまい
 // 起動時に評価されます。
-export function createNodeServer(app: Hono, hostPolicy: HostPolicy = LOOPBACK_HOST_POLICY): Server {
+export function createNodeServer(
+  app: FetchApp,
+  hostPolicy: HostPolicy = LOOPBACK_HOST_POLICY,
+): Server {
   const { createServer } = process.getBuiltinModule('node:http')
   return createServer((req, res) => {
     void dispatchNodeRequest(req, res, async (request) => app.fetch(request), hostPolicy)

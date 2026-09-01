@@ -1,14 +1,12 @@
 import { readFile } from 'node:fs/promises'
 
-import { Hono, type Context } from 'hono'
-
 import { renderBlockDiff } from './diff/block-diff.js'
 import { probeGit, readHeadFile, type GitTrackedFile } from './git-source.js'
 import { imageContentType, resolveManuscriptFile } from './manuscript-path.js'
 import { toManuscript, type ManuscriptSource } from './manuscript.js'
 import { normalizeMarkdown, renderMarkdown, renderMarkdownPiece } from './markdown/render.js'
 import { reloadJs } from './reload.js.js'
-import { documentSecurityMeta, previewSecureHeaders } from './security/headers.js'
+import { documentSecurityMeta, withPreviewHeaders } from './security/headers.js'
 import { withImageSizes } from './typesetting/measure-images.js'
 import { renderDocument, type PreviewMode } from './typesetting/render-page.js'
 import { typesetCss } from './typesetting/typeset.css.js'
@@ -18,6 +16,11 @@ export interface PreviewConfig {
   source: ManuscriptSource
   title?: string
   language?: string
+}
+
+export interface PreviewApp {
+  fetch(request: Request): Promise<Response>
+  request(input: string | URL | Request, init?: RequestInit): Promise<Response>
 }
 
 const HTML_HEADERS = {
@@ -49,30 +52,26 @@ const WATCH_SETTLE_MS = 15
 // つなぎ直すので、これは切断を減らすための保険です。
 const HEARTBEAT_MS = 30_000
 
-export function createPreviewApp(config: PreviewConfig = { source: './content/index.md' }): Hono {
+const PAGE_ROUTES: ReadonlyArray<readonly [path: string, mode: PreviewMode, diff: boolean]> = [
+  ['/', 'print', false],
+  ['/magazine.html', 'magazine', false],
+  ['/magazine', 'magazine', false],
+  ['/web.html', 'web', false],
+  ['/web', 'web', false],
+  ['/diff.html', 'print', true],
+  ['/diff', 'print', true],
+  ['/magazine-diff.html', 'magazine', true],
+  ['/magazine-diff', 'magazine', true],
+  ['/web-diff.html', 'web', true],
+  ['/web-diff', 'web', true],
+]
+
+export function createPreviewApp(
+  config: PreviewConfig = { source: './content/index.md' },
+): PreviewApp {
   const title = config.title ?? 'Typeset Preview'
   const language = config.language ?? 'ja'
   const manuscript = toManuscript(config.source)
-  const app = new Hono()
-  app.use('*', previewSecureHeaders())
-
-  app.get('/health', (c) => c.json({ ok: true }))
-
-  app.get('/assets/typeset.css', (c) => c.body(typesetCss, 200, CSS_HEADERS))
-  app.get('/assets/web.css', (c) => c.body(webCss, 200, CSS_HEADERS))
-  app.get('/assets/reload.js', (c) => c.body(reloadJs, 200, JS_HEADERS))
-
-  app.get('/', (c) => serveManuscript(c, 'print'))
-  app.get('/magazine.html', (c) => serveManuscript(c, 'magazine'))
-  app.get('/magazine', (c) => serveManuscript(c, 'magazine'))
-  app.get('/web.html', (c) => serveManuscript(c, 'web'))
-  app.get('/web', (c) => serveManuscript(c, 'web'))
-  app.get('/diff.html', (c) => serveDiff(c, 'print'))
-  app.get('/diff', (c) => serveDiff(c, 'print'))
-  app.get('/magazine-diff.html', (c) => serveDiff(c, 'magazine'))
-  app.get('/magazine-diff', (c) => serveDiff(c, 'magazine'))
-  app.get('/web-diff.html', (c) => serveDiff(c, 'web'))
-  app.get('/web-diff', (c) => serveDiff(c, 'web'))
 
   // 原稿が変わらないかぎり、組んだ結果を使い回します。
   //
@@ -192,55 +191,59 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
     })
   }
 
-  function manuscriptReadError(c: Context, error: unknown) {
+  function manuscriptReadError(error: unknown): Response {
     if (isNotFound(error)) {
-      return c.body(
+      return new Response(
         errorPage(404, '原稿が見つかりません', '指定された Markdown ファイルが存在しません。'),
-        404,
-        HTML_HEADERS,
+        { status: 404, headers: HTML_HEADERS },
       )
     }
 
     console.error('[kumihan] Failed to read markdown source:', error)
-    return c.body(
+    return new Response(
       errorPage(
         500,
         '読み込みに失敗しました',
         'Markdown ファイルの読み込み中にエラーが発生しました。',
       ),
-      500,
-      HTML_HEADERS,
+      { status: 500, headers: HTML_HEADERS },
     )
   }
 
-  async function serveManuscript(c: Context, mode: PreviewMode) {
+  async function serveManuscript(mode: PreviewMode): Promise<Response> {
     try {
       const markdown = await manuscript.read()
       const html = await documentFor(markdown, mode)
-      return c.body(html, 200, HTML_HEADERS)
+      return new Response(html, { status: 200, headers: HTML_HEADERS })
     } catch (error) {
-      return manuscriptReadError(c, error)
+      return manuscriptReadError(error)
     }
   }
 
-  async function serveDiff(c: Context, mode: PreviewMode) {
+  async function serveDiff(mode: PreviewMode): Promise<Response> {
     let markdown: string
     try {
       markdown = await manuscript.read()
     } catch (error) {
-      return manuscriptReadError(c, error)
+      return manuscriptReadError(error)
     }
 
     const git = await gitSource()
     if (git === null) {
-      return c.body(await unavailableDiffPage(markdown, mode, false), 200, HTML_HEADERS)
+      return new Response(await unavailableDiffPage(markdown, mode, false), {
+        status: 200,
+        headers: HTML_HEADERS,
+      })
     }
 
     const html = await diffPage(markdown, git, mode)
     if (html === null) {
-      return c.body(await unavailableDiffPage(markdown, mode, true), 200, HTML_HEADERS)
+      return new Response(await unavailableDiffPage(markdown, mode, true), {
+        status: 200,
+        headers: HTML_HEADERS,
+      })
     }
-    return c.body(html, 200, HTML_HEADERS)
+    return new Response(html, { status: 200, headers: HTML_HEADERS })
   }
 
   // 保存されたことをプレビューへ知らせる口（SSE）。
@@ -318,10 +321,11 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
     }
   }
 
-  app.get('/events', async (c) => {
+  async function serveEvents(url: URL): Promise<Response> {
     const version = await currentVersion()
     notifiedVersion = version
-    const clientVersion = c.req.query('v')
+    // クエリ無しは「無い」（undefined）。空の `?v=` は空文字のまま。
+    const clientVersion = url.searchParams.get('v') ?? undefined
 
     const encoder = new TextEncoder()
     let notify: ((version: string) => void) | null = null
@@ -351,37 +355,78 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
       },
     })
 
-    return c.body(stream, 200, SSE_HEADERS)
-  })
+    return new Response(stream, { status: 200, headers: SSE_HEADERS })
+  }
 
-  app.get('/*', async (c) => {
-    const rel = c.req.path.slice(1)
+  async function serveImage(pathname: string): Promise<Response> {
+    const rel = pathname.startsWith('/') ? pathname.slice(1) : pathname
     const file = await resolveManuscriptFile(manuscript.root, rel)
-    if (file === null) return c.body('', 404)
+    if (file === null) return new Response('', { status: 404 })
     const type = imageContentType(rel) ?? imageContentType(file)
-    if (type === undefined) return c.body('', 404)
+    if (type === undefined) return new Response('', { status: 404 })
     try {
-      return c.body(await readFile(file), 200, {
-        'Content-Type': type,
-        'Cache-Control': 'no-store',
+      return new Response(await readFile(file), {
+        status: 200,
+        headers: {
+          'Content-Type': type,
+          'Cache-Control': 'no-store',
+        },
       })
     } catch {
-      return c.body('', 404)
+      return new Response('', { status: 404 })
     }
-  })
+  }
 
-  return app
+  const routes = new Map<string, (url: URL) => Promise<Response> | Response>()
+  routes.set('/health', () => Response.json({ ok: true }))
+  routes.set('/assets/typeset.css', () => new Response(typesetCss, { headers: CSS_HEADERS }))
+  routes.set('/assets/web.css', () => new Response(webCss, { headers: CSS_HEADERS }))
+  routes.set('/assets/reload.js', () => new Response(reloadJs, { headers: JS_HEADERS }))
+  for (const [path, mode, diff] of PAGE_ROUTES) {
+    routes.set(path, () => (diff ? serveDiff(mode) : serveManuscript(mode)))
+  }
+  routes.set('/events', (url) => serveEvents(url))
+
+  async function fetch(request: Request): Promise<Response> {
+    const url = new URL(request.url)
+    const method = request.method.toUpperCase()
+    if (method !== 'GET' && method !== 'HEAD') {
+      return withPreviewHeaders(new Response('', { status: 404 }))
+    }
+    const handler = routes.get(url.pathname)
+    const response = handler === undefined ? await serveImage(url.pathname) : await handler(url)
+    return withPreviewHeaders(method === 'HEAD' ? emptyBody(response) : response)
+  }
+
+  return {
+    fetch,
+    request(input, init) {
+      return fetch(toRequest(input, init))
+    },
+  }
+}
+
+function emptyBody(response: Response): Response {
+  void response.body?.cancel()
+  return new Response(null, { status: response.status, headers: response.headers })
+}
+
+function toRequest(input: string | URL | Request, init?: RequestInit): Request {
+  if (input instanceof Request) {
+    return init === undefined ? input : new Request(input, init)
+  }
+  const href =
+    typeof input === 'string' && !/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(input)
+      ? `http://localhost${input.startsWith('/') ? input : `/${input}`}`
+      : String(input)
+  return new Request(href, init)
 }
 
 // Web Crypto（globalThis.crypto）。改ざん耐性は要らず、内容が変わったことが
 // 分かればよいので、先頭 8 バイトの 16 進で十分です。
 async function versionOf(markdown: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(markdown))
-  let version = ''
-  for (const byte of new Uint8Array(digest, 0, 8)) {
-    version += byte.toString(16).padStart(2, '0')
-  }
-  return version
+  return Buffer.from(digest, 0, 8).toString('hex')
 }
 
 function isNotFound(error: unknown): boolean {
