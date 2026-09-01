@@ -213,6 +213,24 @@ describe('typesetting fuzzing', () => {
     }
   })
 
+  // 紙 1 枚を、その紙だけで組み直しても 1 枚のまま。2 枚に割れるなら、その紙は
+  // 版面に入りきらない中身を載せています（紙をまたぐ余白の重なりで詰めすぎた、など）。
+  it('never fills a paper past the page', () => {
+    for (let seed = 1; seed <= 2000; seed += 1) {
+      const html = renderMarkdown(generate(seed * 2246822519 + 11))
+      for (const size of SIZES) {
+        const pages = paginate(html, size)
+        for (const [index, page] of pages.entries()) {
+          assert.equal(
+            paginate(page, size).length,
+            1,
+            `seed ${seed} / ${size.lines} 行: 頁 ${index + 1}/${pages.length} が組み直しで割れる`,
+          )
+        }
+      }
+    }
+  })
+
   it('renders the same pages for the same input', () => {
     for (let seed = 1; seed <= 200; seed += 1) {
       const html = renderMarkdown(generate(seed * 2246822519))

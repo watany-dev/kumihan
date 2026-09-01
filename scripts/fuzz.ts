@@ -9,6 +9,11 @@
  *   bun run fuzz -- --cases 50000 --only image,svg
  *   bun run fuzz -- --seed 12345
  *
+ * 見るのは「落ちない・値が壊れない」だけではありません。寸法の分かっている
+ * 画像（正しく組んだ PNG / GIF / JPEG / WebP / AVIF / SVG の見出し）を読ませて
+ * 読み取った値そのものを確かめ、頁は 1 枚ずつ組み直して版面に収まっているかを
+ * 見て、差分は素朴な DP と keep の数を突き合わせます。
+ *
  * 揺さぶる相手（v0.2.0-preview 以降）:
  *
  *   image     画像ファイルの実寸読み取り（`image-size.ts`）
@@ -185,6 +190,263 @@ function imageBytes(rand: Rand): Uint8Array {
   return bytes
 }
 
+// ===== 寸法の分かっている画像 =====
+//
+// 壊れたバイト列で見られるのは「落ちない・おかしな値を返さない」ところまでです。
+// 読み取りそのものが合っているかは、正しく組んだ見出しに既知の寸法を入れて、
+// 返ってきた値と突き合わせないと分かりません。形式ごとの詰め方（バイト順、
+// 14 ビットに詰めた WebP、box を辿らない ispe 拾い）はここで確かめます。
+
+interface KnownImage {
+  readonly bytes: Uint8Array
+  readonly width: number
+  readonly height: number
+  readonly note: string
+}
+
+function u32be(value: number): Uint8Array {
+  return new Uint8Array([
+    (value >>> 24) & 0xff,
+    (value >>> 16) & 0xff,
+    (value >>> 8) & 0xff,
+    value & 0xff,
+  ])
+}
+
+function u16be(value: number): Uint8Array {
+  return new Uint8Array([(value >>> 8) & 0xff, value & 0xff])
+}
+
+function u16le(value: number): Uint8Array {
+  return new Uint8Array([value & 0xff, (value >>> 8) & 0xff])
+}
+
+function u32le(value: number): Uint8Array {
+  return new Uint8Array([
+    value & 0xff,
+    (value >>> 8) & 0xff,
+    (value >>> 16) & 0xff,
+    (value >>> 24) & 0xff,
+  ])
+}
+
+function u24le(value: number): Uint8Array {
+  return new Uint8Array([value & 0xff, (value >>> 8) & 0xff, (value >>> 16) & 0xff])
+}
+
+/** 1 以上 limit 以下の寸法。境目（1、上限、上限ぎりぎり）を厚めに引きます。 */
+function dimension(rand: Rand, limit: number): number {
+  const edges = [1, 2, 3, limit, limit - 1, Math.floor(limit / 2)]
+  if (rand() < 0.35) {
+    const edge = pick(rand, edges)
+    return edge >= 1 && edge <= limit ? edge : 1
+  }
+  return 1 + upto(rand, Math.min(limit, 4096))
+}
+
+function knownPng(rand: Rand): KnownImage {
+  const width = dimension(rand, 0x7fff_ffff)
+  const height = dimension(rand, 0x7fff_ffff)
+  return {
+    bytes: concat([
+      new Uint8Array(PNG_SIGNATURE),
+      u32be(13),
+      ascii('IHDR'),
+      u32be(width),
+      u32be(height),
+      new Uint8Array([8, 6, 0, 0, 0]),
+      u32be(0),
+    ]),
+    width,
+    height,
+    note: 'png',
+  }
+}
+
+function knownGif(rand: Rand): KnownImage {
+  const width = dimension(rand, 0xffff)
+  const height = dimension(rand, 0xffff)
+  return {
+    bytes: concat([
+      ascii(pick(rand, ['GIF87a', 'GIF89a'])),
+      u16le(width),
+      u16le(height),
+      new Uint8Array([0x00, 0x00, 0x00]),
+    ]),
+    width,
+    height,
+    note: 'gif',
+  }
+}
+
+function knownJpeg(rand: Rand): KnownImage {
+  const width = dimension(rand, 0xffff)
+  const height = dimension(rand, 0xffff)
+  const parts: Uint8Array[] = [new Uint8Array([0xff, 0xd8])]
+  // 寸法の手前に挟まる領域（Exif、コメント、量子化表）と、詰め物の 0xff。
+  const before = upto(rand, 4)
+  for (let i = 0; i < before; i += 1) {
+    if (rand() < 0.25) parts.push(new Uint8Array([0xff]))
+    const payload = noise(rand, upto(rand, 30))
+    parts.push(new Uint8Array([0xff, pick(rand, [0xe0, 0xe1, 0xdb, 0xfe, 0xc4])]))
+    parts.push(u16be(payload.length + 2))
+    parts.push(payload)
+  }
+  // フレーム開始。長さは自分の 2 バイトを含みます。
+  const frame = pick(rand, [0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb])
+  parts.push(new Uint8Array([0xff, frame]))
+  parts.push(u16be(8 + 3))
+  parts.push(new Uint8Array([8]))
+  parts.push(u16be(height))
+  parts.push(u16be(width))
+  parts.push(new Uint8Array([1, 1, 0x11, 0]))
+  parts.push(new Uint8Array([0xff, 0xd9, 0, 0, 0, 0, 0, 0, 0, 0]))
+  return { bytes: concat(parts), width, height, note: `jpeg/${frame.toString(16)}` }
+}
+
+function riffHeader(chunk: string, payload: Uint8Array): Uint8Array {
+  return concat([
+    ascii('RIFF'),
+    u32le(payload.length + 12),
+    ascii('WEBP'),
+    ascii(chunk),
+    u32le(payload.length),
+    payload,
+  ])
+}
+
+function knownWebp(rand: Rand): KnownImage {
+  const kind = upto(rand, 3)
+  if (kind === 0) {
+    const width = dimension(rand, 0x3fff)
+    const height = dimension(rand, 0x3fff)
+    const payload = concat([
+      new Uint8Array([0x30, 0x01, 0x00]), // フレームタグ
+      new Uint8Array([0x9d, 0x01, 0x2a]), // 同期コード
+      u16le(width),
+      u16le(height),
+      new Uint8Array([0, 0]),
+    ])
+    return { bytes: riffHeader('VP8 ', payload), width, height, note: 'webp/vp8' }
+  }
+  if (kind === 1) {
+    const width = dimension(rand, 0x4000)
+    const height = dimension(rand, 0x4000)
+    const bits = (width - 1) | ((height - 1) << 14)
+    const payload = concat([
+      new Uint8Array([0x2f]),
+      u32le(bits >>> 0),
+      new Uint8Array([0, 0, 0, 0]),
+    ])
+    return { bytes: riffHeader('VP8L', payload), width, height, note: 'webp/vp8l' }
+  }
+  const width = dimension(rand, 0xff_ffff)
+  const height = dimension(rand, 0xff_ffff)
+  const payload = concat([
+    new Uint8Array([0x10, 0, 0, 0]), // フラグと予約
+    u24le(width - 1),
+    u24le(height - 1),
+    new Uint8Array([0, 0, 0, 0]),
+  ])
+  return { bytes: riffHeader('VP8X', payload), width, height, note: 'webp/vp8x' }
+}
+
+function ispeBox(width: number, height: number): Uint8Array {
+  return concat([u32be(20), ascii('ispe'), u32be(0), u32be(width), u32be(height)])
+}
+
+function knownIso(rand: Rand): KnownImage {
+  const width = dimension(rand, 0xffff)
+  const height = dimension(rand, 0xffff)
+  const parts: Uint8Array[] = [
+    u32be(16),
+    ascii('ftyp'),
+    ascii(pick(rand, ['avif', 'heic', 'mif1'])),
+    ascii('avif'),
+  ]
+  // 縮小版の ispe が先に来ることがあります。いちばん大きいものを採るはず。
+  const thumbnail = rand() < 0.5
+  if (thumbnail) parts.push(ispeBox(Math.max(1, width >> 4), Math.max(1, height >> 4)))
+  parts.push(ispeBox(width, height))
+  parts.push(new Uint8Array([0, 0, 0, 0]))
+  return { bytes: concat(parts), width, height, note: `iso${thumbnail ? '/thumb' : ''}` }
+}
+
+const KNOWN_SVG_UNITS: [string, number][] = [
+  ['', 1],
+  ['px', 1],
+  ['pt', 96 / 72],
+  ['pc', 16],
+  ['in', 96],
+  ['mm', 96 / 25.4],
+  ['cm', 96 / 2.54],
+  ['q', 96 / 101.6],
+]
+
+/** 属性から寸法が定まる SVG。読み取った値まで確かめられる形だけを作ります。 */
+function knownSvg(rand: Rand): KnownImage {
+  const numbers = ['1', '10', '12.5', '.5', '+3', '0120', '640']
+  const [unit, scale] = pick(rand, KNOWN_SVG_UNITS)
+  const [unit2, scale2] = pick(rand, KNOWN_SVG_UNITS)
+  const w = pick(rand, numbers)
+  const h = pick(rand, numbers)
+  const cased = (text: string): string => (rand() < 0.2 ? text.toUpperCase() : text)
+  const quote = rand() < 0.3 ? "'" : '"'
+  const shape = upto(rand, 3)
+
+  if (shape === 0) {
+    // width と height がそろっているとき、viewBox は見ない。
+    const box = rand() < 0.5 ? ` viewBox="0 0 7 3"` : ''
+    return {
+      bytes: ascii(
+        `<svg width=${quote}${w}${cased(unit)}${quote} height=${quote}${h}${cased(unit2)}${quote}${box}></svg>`,
+      ),
+      width: Number(w) * scale,
+      height: Number(h) * scale2,
+      note: `svg/wh ${w}${unit} ${h}${unit2}`,
+    }
+  }
+  const boxWidth = 1 + upto(rand, 400)
+  const boxHeight = 1 + upto(rand, 400)
+  const separator = pick(rand, [' ', ',', ', ', '  '])
+  const box = ` viewBox=${quote}0${separator}0${separator}${boxWidth}${separator}${boxHeight}${quote}`
+  if (shape === 1) {
+    // viewBox だけ。大きさはそのまま。
+    return {
+      bytes: ascii(`<svg${box}></svg>`),
+      width: boxWidth,
+      height: boxHeight,
+      note: 'svg/box',
+    }
+  }
+  // 片側だけ。もう片方は viewBox の縦横比で決まる。
+  const value = Number(w) * scale
+  if (rand() < 0.5) {
+    return {
+      bytes: ascii(`<svg width=${quote}${w}${cased(unit)}${quote}${box}></svg>`),
+      width: value,
+      height: (value * boxHeight) / boxWidth,
+      note: `svg/w+box ${w}${unit}`,
+    }
+  }
+  return {
+    bytes: ascii(`<svg height=${quote}${w}${cased(unit)}${quote}${box}></svg>`),
+    width: (value * boxWidth) / boxHeight,
+    height: value,
+    note: `svg/h+box ${w}${unit}`,
+  }
+}
+
+function knownImage(rand: Rand): KnownImage {
+  const family = upto(rand, 6)
+  if (family === 0) return knownPng(rand)
+  if (family === 1) return knownGif(rand)
+  if (family === 2) return knownJpeg(rand)
+  if (family === 3) return knownWebp(rand)
+  if (family === 4) return knownIso(rand)
+  return knownSvg(rand)
+}
+
 // ===== SVG =====
 
 const SVG_NUMBERS = ['10', '0', '-4', '1.5', '.5', '+3', '1e3', '00012', '1.', '999999999999999']
@@ -253,6 +515,8 @@ const PREFIX = ['', '# ', '## ', '### ', '> ', '> > ', '- ', '1. ', '```', '---'
 const LINE_ENDING = ['\n', '\n', '\n', '\n\n', '\r\n', '\r']
 
 function manuscript(rand: Rand, maxLines: number): string {
+  // 半分は記号を並べた原稿、半分は原稿らしいブロックの列。
+  if (rand() < 0.5) return documentSource(rand, Math.max(1, Math.ceil(maxLines / 3)))
   const lines: string[] = []
   const count = 1 + upto(rand, maxLines)
   for (let l = 0; l < count; l += 1) {
@@ -266,6 +530,94 @@ function manuscript(rand: Rand, maxLines: number): string {
   for (let l = 0; l < lines.length; l += 1) {
     source += lines[l] ?? ''
     if (l < lines.length - 1) source += pick(rand, LINE_ENDING)
+  }
+  return source
+}
+
+// 記号を並べた原稿は変換の隅を突きますが、頁分けはそれでは動きません（見出しも
+// 表もコードも出てこない）。組み上がりの高さ、2段の折り返し、泣き別れの送りに
+// 当てるため、原稿らしい形のブロックも同じ割合で混ぜます。
+
+const BODY_TEXT =
+  '組版の見当を確かめるための本文です。句読点や、括弧（かっこ）、英字の ASCII text、' +
+  '長めの熟語が混ざります。段落の長さはまちまちで、折り返しの数え方をそのまま試します。'
+
+function bodyText(rand: Rand, limit: number): string {
+  const length = 1 + upto(rand, limit)
+  let text = ''
+  while (text.length < length) text += BODY_TEXT
+  return text.slice(0, length)
+}
+
+function fenceBlock(rand: Rand): string {
+  const lines = Array.from(
+    { length: 1 + upto(rand, 12) },
+    () => '  '.repeat(upto(rand, 3)) + bodyText(rand, 60),
+  )
+  const open = pick(rand, ['```', '```ts', '```json', '````'])
+  // 2 割は閉じないまま。区画分けと差分はここで切り方が変わります。
+  return rand() < 0.2 ? `${open}\n${lines.join('\n')}` : `${open}\n${lines.join('\n')}\n\`\`\``
+}
+
+function tableBlock(rand: Rand): string {
+  const columns = 1 + upto(rand, 4)
+  const cell = (): string => (rand() < 0.2 ? '' : bodyText(rand, 1 + upto(rand, 40)))
+  const row = (make: () => string): string =>
+    `| ${Array.from({ length: columns }, make).join(' | ')} |`
+  const rows = [
+    row(cell),
+    row(() => pick(rand, ['---', ':--', '--:', ':-:'])),
+    // 桁のそろわない行を混ぜます。
+    ...Array.from({ length: 1 + upto(rand, 6) }, () =>
+      rand() < 0.2 ? `| ${cell()} |` : row(cell),
+    ),
+  ]
+  return rows.join('\n')
+}
+
+function listBlock(rand: Rand): string {
+  const ordered = rand() < 0.4
+  return Array.from({ length: 1 + upto(rand, 8) }, (_, i) => {
+    const indent = ' '.repeat(2 * upto(rand, 3))
+    const marker = ordered ? `${i + 1}. ` : pick(rand, ['- ', '* ', '+ '])
+    return `${indent}${marker}${bodyText(rand, 1 + upto(rand, 80))}`
+  }).join('\n')
+}
+
+function quoteBlock(rand: Rand): string {
+  return Array.from({ length: 1 + upto(rand, 5) }, () => {
+    const depth = 1 + upto(rand, 2)
+    return `${'> '.repeat(depth)}${rand() < 0.2 ? '' : bodyText(rand, 1 + upto(rand, 90))}`
+  }).join('\n')
+}
+
+function imageBlock(rand: Rand): string {
+  const name = `fig${upto(rand, 4)}.${pick(rand, ['png', 'jpg', 'svg', 'webp'])}`
+  const alt = rand() < 0.2 ? '' : bodyText(rand, 1 + upto(rand, 20))
+  const link = rand() < 0.2
+  const image = `![${alt}](${name})`
+  return link ? `[${image}](https://example.com/${name})` : image
+}
+
+function documentBlock(rand: Rand): string {
+  const kind = upto(rand, 9)
+  if (kind === 0) return `${pick(rand, ['# ', '## ', '### ', '#### '])}${bodyText(rand, 30)}`
+  if (kind === 1) return fenceBlock(rand)
+  if (kind === 2) return tableBlock(rand)
+  if (kind === 3) return listBlock(rand)
+  if (kind === 4) return quoteBlock(rand)
+  if (kind === 5) return imageBlock(rand)
+  if (kind === 6) return pick(rand, ['---', '***', '___', '- - -'])
+  if (kind === 7) return pick(rand, ['<div>', '<div>\n本文\n</div>', '<!-- 覚え書き -->'])
+  return bodyText(rand, 1 + upto(rand, 900))
+}
+
+/** 原稿らしいブロックを並べたもの。 */
+function documentSource(rand: Rand, maxBlocks: number): string {
+  const blocks = Array.from({ length: 1 + upto(rand, maxBlocks) }, () => documentBlock(rand))
+  let source = ''
+  for (const block of blocks) {
+    source += block + pick(rand, ['\n\n', '\n\n', '\n\n', '\n', '\n\n\n', '\r\n\r\n'])
   }
   return source
 }
@@ -303,6 +655,13 @@ function textOnly(html: string): string {
 /** タグだけを順に並べたもの。要素が消えたり増えたりしていないか見る。 */
 function tagStream(html: string): string {
   return (html.match(/<[^>]*>/g) ?? []).join('')
+}
+
+/** 組み上げた HTML から、紙（または Web の記事）の中身だけを取り出す。 */
+function articles(html: string): string[] {
+  return [...html.matchAll(/<article class="[^"]*">\n([\s\S]*?)\n {4}<\/article>/g)].map(
+    (match) => match[1] ?? '',
+  )
 }
 
 const VOID_TAGS = new Set(['br', 'hr', 'img', 'meta', 'link'])
@@ -352,10 +711,27 @@ function tagNameOf(block: string): string {
 
 // ===== それぞれのファジング =====
 
+/** 既知の寸法を持つ見出しを読ませ、返ってきた値をそのまま突き合わせる。 */
+function checkKnown(failures: Failures, kind: string, seed: number, known: KnownImage): void {
+  const size = imageSize(known.bytes)
+  failures.check(
+    size !== null && size.width === known.width && size.height === known.height,
+    `${kind}/known`,
+    seed,
+    () => `${known.note}: ${JSON.stringify(size)} / want ${known.width}x${known.height}`,
+  )
+}
+
 function fuzzImage(failures: Failures, base: number, cases: number): void {
   for (let n = 0; n < cases; n += 1) {
     const seed = base + n
     const rand = mulberry32(seed * 2654435761)
+    // 半分は寸法の分かっている見出し、半分は壊れたバイト列。
+    if (rand() < 0.5) {
+      const known = knownImage(rand)
+      failures.guard('image', seed, () => checkKnown(failures, 'image', seed, known))
+      continue
+    }
     const bytes = imageBytes(rand)
     failures.guard('image', seed, () => {
       const started = performance.now()
@@ -381,6 +757,11 @@ function fuzzSvg(failures: Failures, base: number, cases: number): void {
   for (let n = 0; n < cases; n += 1) {
     const seed = base + n
     const rand = mulberry32(seed * 40503 + 7)
+    if (rand() < 0.3) {
+      const known = knownSvg(rand)
+      failures.guard('svg', seed, () => checkKnown(failures, 'svg', seed, known))
+      continue
+    }
     const text = svgText(rand)
     failures.guard('svg', seed, () => {
       const started = performance.now()
@@ -473,6 +854,30 @@ function fuzzTypeset(failures: Failures, base: number, cases: number): void {
           seed,
           () => `${pages.length} 頁 / ${blocks.length} ブロック`,
         )
+
+        // 組み上がった紙 1 枚を、もう一度その寸法で頁分けすると 1 枚のまま。
+        // 2 枚に割れるなら、その紙は入りきらない中身を載せていたことになります
+        //（ブロック 1 つで紙を越えるものは、置き場が無いので 1 枚に留まります）。
+        for (let i = 0; i < pages.length; i += 1) {
+          const page = pages[i] ?? ''
+          const again = paginate(page, layout)
+          failures.check(
+            again.length === 1,
+            'typeset/refit',
+            seed,
+            () => `頁 ${i + 1}/${pages.length} が組み直しで ${again.length} 枚に割れる`,
+          )
+        }
+
+        // 頁分けは覚え書き（blocksOf の cache）を持つので、同じ断片を続けて
+        // 頁分けしても結果は変わらない。
+        const twice = paginate(fragment, layout)
+        failures.check(
+          twice.length === pages.length && twice.every((page, at) => page === pages[at]),
+          'typeset/stable',
+          seed,
+          () => `${pages.length} 頁 → ${twice.length} 頁`,
+        )
       }
     })
   }
@@ -518,6 +923,32 @@ function fuzzSegment(failures: Failures, base: number, cases: number): void {
       )
     })
   }
+}
+
+/** 空白だけの区画を落とした区画の列。差分が並べ替える相手。 */
+function content(text: string): string[] {
+  return splitSegments(text).filter((segment) => !/^\s*$/.test(segment))
+}
+
+/** 素朴な DP で測る最長共通部分列の長さ。差分の keep と突き合わせます。 */
+function lcsLength(a: readonly string[], b: readonly string[]): number {
+  let previous = new Uint32Array(b.length + 1)
+  let row = new Uint32Array(b.length + 1)
+  for (let i = 1; i <= a.length; i += 1) {
+    for (let j = 1; j <= b.length; j += 1) {
+      if (a[i - 1] === b[j - 1]) {
+        row[j] = (previous[j - 1] ?? 0) + 1
+      } else {
+        const left = row[j - 1] ?? 0
+        const up = previous[j] ?? 0
+        row[j] = left >= up ? left : up
+      }
+    }
+    const swap = previous
+    previous = row
+    row = swap
+  }
+  return previous[b.length] ?? 0
 }
 
 /** 食い違った最初のブロックだけを見せる。 */
@@ -597,6 +1028,43 @@ function fuzzDiff(failures: Failures, base: number, cases: number): void {
         )
       }
 
+      // 差分は「旧に del を当てて add を入れると新になる」もの。並べ直しでは
+      // なく、順に当てられることをここで見ます。
+      const opsFor = (kind: string): string[] =>
+        diffSegments(splitSegments(oldText), splitSegments(newText))
+          .filter((op) => op.kind !== kind)
+          .map((op) => op.text)
+      failures.check(
+        opsFor('del').join('\u0000') === content(newText).join('\u0000'),
+        'diff/apply-new',
+        seed,
+        () => JSON.stringify(after.slice(0, 200)),
+      )
+      failures.check(
+        opsFor('add').join('\u0000') === content(oldText).join('\u0000'),
+        'diff/apply-old',
+        seed,
+        () => JSON.stringify(before.slice(0, 200)),
+      )
+
+      // keep の数は最長共通部分列の長さそのもの。前後の一致を外す近道や
+      // 「まるごと入れ替え」への倒しで、余計に消して足す差分になっていないか。
+      // 表を組める大きさのときだけ、素朴な DP と突き合わせます。
+      const oldContent = content(oldText)
+      const newContent = content(newText)
+      if (oldContent.length <= 60 && newContent.length <= 60) {
+        const keeps = diffSegments(splitSegments(oldText), splitSegments(newText)).filter(
+          (op) => op.kind === 'keep',
+        ).length
+        const best = lcsLength(oldContent, newContent)
+        failures.check(
+          keeps === best,
+          'diff/lcs-best',
+          seed,
+          () => `keep ${keeps} / 最長共通部分列 ${best}`,
+        )
+      }
+
       // LCS そのもの。keep は両側に同じ順で現れる。
       const ops = diffSegments(splitSegments(oldText), splitSegments(newText))
       const keeps = ops.filter((op) => op.kind === 'keep').length
@@ -649,6 +1117,31 @@ function fuzzDocument(failures: Failures, base: number, cases: number): void {
           seed,
           () => `${mode}: ${JSON.stringify(source.slice(0, 160))}`,
         )
+
+        // 紙に載った地の文は、組み上げの前の断片と同じ。組み上げは頁分けを
+        // 通すので、ここが崩れれば本文の落ちや重複です。
+        failures.check(
+          textOnly(articles(html).join('')) === textOnly(fragment),
+          'document/text',
+          seed,
+          () => `${mode}: ${JSON.stringify(source.slice(0, 160))}`,
+        )
+
+        // 切替は 3 つのモードと、差分ビューでは差分のトグル。
+        const links = [...html.matchAll(/<a class="mode-switch-link[^"]*" href="([^"]*)"/g)]
+        failures.check(
+          links.length === 4,
+          'document/switcher',
+          seed,
+          () => `${mode}: ${links.map((m) => m[1]).join(' ')}`,
+        )
+        failures.check(
+          html.includes('aria-pressed="true"') === diff,
+          'document/diff-toggle',
+          seed,
+          () => `${mode}: ${diff ? '差分' : '通常'}`,
+        )
+
         if (mode === 'web') continue
 
         // ノンブルは 1 から順に、抜けなく並ぶ。
@@ -681,12 +1174,66 @@ function fuzzDocument(failures: Failures, base: number, cases: number): void {
   }
 }
 
+/** 実寸から `<img>` に入るはずの値。measure-images.ts と同じ丸め方。 */
+function expectedAttribute(value: number): number | null {
+  const rounded = Math.max(1, Math.round(value))
+  return Number.isSafeInteger(rounded) ? rounded : null
+}
+
 async function fuzzMeasure(failures: Failures, base: number, cases: number): Promise<void> {
   const root = await mkdtemp(join(tmpdir(), 'kumihan-fuzz-measure-'))
   try {
     for (let n = 0; n < cases; n += 1) {
       const seed = base + n
       const rand = mulberry32(seed * 2246822519 + 23)
+
+      // 半分は寸法の分かっている画像。書き入れられた値まで確かめます。
+      if (rand() < 0.5) {
+        const known = knownImage(rand)
+        const extension = looksSvg(known.bytes) ? 'svg' : pick(rand, ['png', 'jpg', 'webp', 'avif'])
+        const name = `known${upto(rand, 4)}.${extension}`
+        await writeFile(join(root, name), known.bytes)
+        // 原稿の中では実体参照になる名前や、原稿の外を指す参照も混ぜます。
+        const src = pick(rand, [name, name, name, `./${name}`, `../${name}`, `な い.${extension}`])
+        const fragment = renderMarkdown(`![図](${src})\n\n本文\n`)
+        try {
+          const sized = await withImageSizes(fragment, root)
+          const tag = /<img\b[^>]*>/.exec(sized)?.[0] ?? ''
+          const width = /\swidth="([^"]*)"/.exec(tag)?.[1]
+          const height = /\sheight="([^"]*)"/.exec(tag)?.[1]
+          if (src !== name && src !== `./${name}`) {
+            // 原稿の外や、無い名前。寸法は入りません。
+            failures.check(
+              width === undefined && height === undefined,
+              'measure/outside',
+              seed,
+              () => `${src}: ${tag.slice(0, 160)}`,
+            )
+            continue
+          }
+          const wantWidth = expectedAttribute(known.width)
+          const wantHeight = expectedAttribute(known.height)
+          if (wantWidth === null || wantHeight === null) {
+            failures.check(
+              width === undefined && height === undefined,
+              'measure/unsafe',
+              seed,
+              () => `${known.note}: ${tag.slice(0, 160)}`,
+            )
+            continue
+          }
+          failures.check(
+            width === String(wantWidth) && height === String(wantHeight),
+            'measure/known',
+            seed,
+            () => `${known.note}: ${tag.slice(0, 160)} / want ${wantWidth}x${wantHeight}`,
+          )
+        } catch (error) {
+          failures.check(false, 'measure/throw', seed, () => String(error).slice(0, 300))
+        }
+        continue
+      }
+
       const name = `fig${upto(rand, 4)}.${pick(rand, ['png', 'jpg', 'gif', 'webp', 'svg', 'avif'])}`
       await writeFile(join(root, name), imageBytes(rand))
       const fragment = renderMarkdown(`![図](${name})\n\n本文\n`)
@@ -726,6 +1273,11 @@ async function fuzzMeasure(failures: Failures, base: number, cases: number): Pro
   }
 }
 
+/** 拡張子を選ぶための見分け。SVG は文字列なので中身で分かります。 */
+function looksSvg(bytes: Uint8Array): boolean {
+  return bytes[0] === 0x3c
+}
+
 async function fuzzHttp(failures: Failures, base: number, cases: number): Promise<void> {
   const { execFile } = process.getBuiltinModule('node:child_process')
   const run = (cwd: string, args: string[]): Promise<void> =>
@@ -744,13 +1296,40 @@ async function fuzzHttp(failures: Failures, base: number, cases: number): Promis
     await run(root, ['-c', 'commit.gpgsign=false', 'commit', '-qm', 'init'])
 
     const app = createPreviewApp({ source })
-    const paths = ['/', '/magazine', '/web', '/diff', '/magazine-diff', '/web-diff']
+    const paths = [
+      '/',
+      '/magazine',
+      '/magazine.html',
+      '/web',
+      '/web.html',
+      '/diff',
+      '/diff.html',
+      '/magazine-diff',
+      '/web-diff',
+      '/health',
+      '/assets/typeset.css',
+      '/assets/web.css',
+      '/assets/reload.js',
+    ]
+    // 配ってはいけない参照。原稿の外、絶対パス、符号化した `..`、空の名前。
+    const refused = [
+      '/../index.md',
+      '/%2e%2e/%2e%2e/etc/passwd',
+      '/..%2ffig.png',
+      '/index.md',
+      '/fig.png',
+      '/assets/../index.md',
+      '/%00.png',
+    ]
     for (let n = 0; n < cases; n += 1) {
       const seed = base + n
       const rand = mulberry32(seed * 1103515245 + 29)
-      await writeFile(source, manuscript(rand, 20))
+      const text = manuscript(rand, 20)
+      await writeFile(source, text)
       for (const path of paths) {
-        const response = await app.request(`http://127.0.0.1${path}`)
+        const query = rand() < 0.2 ? `?${pick(rand, ['v=1', 'a=%2e%2e', '=', '#'])}` : ''
+        const method = rand() < 0.1 ? 'HEAD' : 'GET'
+        const response = await app.request(`http://127.0.0.1${path}${query}`, { method })
         const body = await response.text()
         failures.check(
           response.status === 200,
@@ -764,11 +1343,40 @@ async function fuzzHttp(failures: Failures, base: number, cases: number): Promis
           seed,
           () => `${path}: ${body.slice(0, 200)}`,
         )
+        // 中身を見るのは HTML の頁だけ。HEAD は本文を持ちません。
+        if (method === 'HEAD' || path.startsWith('/assets') || path === '/health') continue
         failures.check(
           unbalanced(body).length === 0,
           'http/unbalanced',
           seed,
           () => `${path}: ${unbalanced(body).join(',')}`,
+        )
+        // プレビューの HTML は毎回 CSP を添えます。
+        failures.check(
+          body.includes('Content-Security-Policy'),
+          'http/csp',
+          seed,
+          () => `${path}: ${body.slice(0, 160)}`,
+        )
+        // 差分ビューは、原稿が最初のコミットと違えば必ず印がつきます
+        //（区画がすべて空白のときだけ、差分に出す中身がありません）。
+        if (path.includes('diff') && normalizeMarkdown(text).trim().length > 0) {
+          failures.check(
+            body.includes('diff-added') || body.includes('diff-removed'),
+            'http/diff-marks',
+            seed,
+            () => `${path}: ${JSON.stringify(text.slice(0, 160))}`,
+          )
+        }
+      }
+      // 原稿の外を指す参照は配りません。
+      for (const path of refused) {
+        const response = await app.request(`http://127.0.0.1${path}`)
+        failures.check(
+          response.status === 404,
+          'http/refused',
+          seed,
+          () => `${path}: ${response.status}`,
         )
       }
     }
