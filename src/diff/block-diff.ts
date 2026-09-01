@@ -75,6 +75,14 @@ export function diffSegments(oldSegs: readonly string[], newSegs: readonly strin
 }
 
 /**
+ * 最後の区画はファイル末尾の `\n` を含むが、途中の区画は区切りの空行の
+ * 手前で切れる。同じ本文のあとに区画を足しただけで keep が外れるのを防ぐ。
+ */
+function trimSegment(segment: string): string {
+  return segment.endsWith('\n') ? segment.slice(0, -1) : segment
+}
+
+/**
  * keep はそのまま、連続する del / add は同じ kind の wrapper 1 つにまとめる。
  * 隣接する del ランと add ランは del → add の順（削除が元の位置に残る）。
  */
@@ -84,7 +92,10 @@ export function renderBlockDiff(
   renderPiece: (segment: string) => string,
 ): string {
   return htmlFromOps(
-    diffSegments(splitSegments(oldNormalized), splitSegments(newNormalized)),
+    diffSegments(
+      splitSegments(oldNormalized).map(trimSegment),
+      splitSegments(newNormalized).map(trimSegment),
+    ),
     renderPiece,
   )
 }

@@ -68,6 +68,11 @@ describe('renderBlockDiff', () => {
     assert.equal(html.includes('diff-'), false)
   })
 
+  it('does not treat a trailing newline on the last segment as a change', () => {
+    const html = renderBlockDiff('A\n\nB\n', 'A\n\nB\n\nC\n', (segment) => segment)
+    assert.equal(html, 'A\nB\n<div class="diff-added">C</div>')
+  })
+
   it('renders empty manuscripts to empty html', () => {
     assert.equal(renderBlockDiff('', '', renderMarkdownPiece), '')
     assert.equal(renderBlockDiff(' \n\n ', '', renderMarkdownPiece), '')
