@@ -21,6 +21,7 @@ GitHub Codespaces と Dev Container は Bun と Vite+ を入れ、`vp install --
 | `vp check`                 | フォーマット・lint（警告もエラー）・型チェック              |
 | `bun run knip`             | 未使用のファイル・export・依存関係を検出する                |
 | `vp test`                  | parser / renderer / HTTP のテストとファジング               |
+| `bun run fuzz`             | 桁を上げたファジング（既定 100 万件）                       |
 | `vp test --coverage`       | 同上。`src/**` のカバレッジ 95% を要求する                  |
 | `bun run bench`            | 組版パイプラインの処理時間を測る                            |
 | `bun run bench:latency`    | 保存からプレビュー反映までの遅れと、無変更時の転送量を測る  |
@@ -30,6 +31,23 @@ GitHub Codespaces と Dev Container は Bun と Vite+ を入れ、`vp install --
 | `bun audit`                | 依存関係の脆弱性を検査する                                  |
 
 `vp fmt` / `vp lint` でも個別に実行できます。テストのファジングは種を固定しているので再現します。
+
+## ファジング
+
+CI が毎回回すファジング（`test/fuzz*.test.ts`）は、テスト全体を数秒に収めるため
+件数を数千に抑えています。その外側で桁を上げて回すのが `scripts/fuzz.ts` です。
+
+```bash
+bun run fuzz                                  # 既定は 100 万件（2〜3 分）
+bun run fuzz -- --cases 50000 --only image,svg
+bun run fuzz -- --seed 12345                  # 種を変えて別の列を回す
+```
+
+揺さぶるのは v0.2.0-preview のあとに入った機能です。`image` / `svg` が画像の実寸
+読み取り、`measure` が断片への書き入れ、`typeset` が頁分け（ブロック種別ごとの
+高さ・2段の折り返し・泣き別れの送り）、`segment` が区画分け、`diff` が区画差分、
+`document` がノンブルと柱、`http` が差分ビューを含むプレビューの経路です。
+不具合が見つかると種と入力を出して終了コード 1 で終わります。同じ種なら再現します。
 
 ## HTTP
 

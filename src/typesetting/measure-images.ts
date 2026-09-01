@@ -50,6 +50,12 @@ export async function withImageSizes(fragment: string, root: string): Promise<st
     }
     const width = Math.max(1, Math.round(size.width))
     const height = Math.max(1, Math.round(size.height))
+    // 属性に書けるのは整数だけです。SVG は `width="1..1"`（100 桁）のような
+    // 値も持てるので、指数表記になるほど大きいものは寸法なしに落とします
+    // （どのみち版面まで縮むので、見積りは 1 行のままで困りません）。
+    if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height)) {
+      return tag
+    }
     return `${tag.slice(0, -1)} width="${width}" height="${height}">`
   })
 }

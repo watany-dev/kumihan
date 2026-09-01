@@ -205,6 +205,25 @@ describe('image size', () => {
     assert.equal(imageSize(ascii('   ')), null)
   })
 
+  // ここから 2 つはファジングで見つけた不具合の回帰テストです。
+  it('reads a width made only of digits in one pass', () => {
+    // measure-images.ts は画像の先頭 64KB を読みます。長さの走査が桁数の
+    // 二乗になっていたので、桁を並べた width ひとつでプレビューが 10 秒
+    // 近く止まりました（原稿の隣に置いた SVG 1 つで起こせます）。
+    const svg = `<svg width="${'1'.repeat(64 * 1024)}!" height="10"></svg>`
+    const started = performance.now()
+    assert.equal(imageSize(ascii(svg)), null)
+    const elapsed = performance.now() - started
+    assert.ok(elapsed < 1000, `64KB の width の走査に ${elapsed.toFixed(0)}ms かかった`)
+  })
+
+  it('rejects a size that overflows while keeping the viewBox ratio', () => {
+    // 縦だけが桁外れなら、viewBox の比から出した幅があふれます。Infinity を
+    // 通すと `<img width="Infinity">` が組み上がりました。
+    const tall = `<svg height="${'1'.repeat(308)}" viewBox="0 0 100 1"></svg>`
+    assert.equal(imageSize(ascii(tall)), null)
+  })
+
   it('rejects bytes that are neither an image nor markup', () => {
     assert.equal(imageSize(new Uint8Array(0)), null)
     assert.equal(imageSize(bytes(0x00, 0x01, 0x02, 0x03)), null)
@@ -272,6 +291,19 @@ describe('measuring the images of a manuscript', () => {
       assert.equal(
         await withImageSizes('<p><img src="#anchor" alt=""></p>', root),
         '<p><img src="#anchor" alt=""></p>',
+      )
+    })
+  })
+
+  it('leaves an image whose size does not fit an integer attribute untouched', async () => {
+    // SVG は `width="1..1"`（100 桁）のような長さも持てます。丸めた値が
+    // 指数表記になると `width="1e+100"` という属性を書き込んでいました。
+    await withRoot(async (root) => {
+      const huge = `<svg width="${'1'.repeat(100)}" height="${'1'.repeat(100)}"></svg>`
+      await writeFile(join(root, 'huge.svg'), ascii(huge))
+      assert.equal(
+        await withImageSizes('<p><img src="huge.svg" alt=""></p>', root),
+        '<p><img src="huge.svg" alt=""></p>',
       )
     })
   })

@@ -16,6 +16,7 @@
     "dev": "bun src/server.ts",
     "export": "bun scripts/export.ts",
     "fmt": "vp fmt",
+    "fuzz": "bun scripts/fuzz.ts",
     "knip": "knip",
     "lint": "vp lint",
     "test": "vp test",

@@ -8,6 +8,7 @@ import { describe, it } from 'vite-plus/test'
 import { createPreviewApp } from '../src/app.js'
 import { writeExport } from '../src/export/write-files.js'
 import { renderMarkdown } from '../src/markdown/render.js'
+import { imageSize } from '../src/typesetting/image-size.js'
 
 // v0.1.0 のあとに入った `![alt](path)`（#27）を、原稿からプレビューと書き出しの
 // 両方へ通して揺さぶります。画像は同じ 1 つの原稿から 2 つの経路へ出ていくので、
@@ -216,6 +217,53 @@ describe('image fuzzing', () => {
       console.error = original
       await rm(root, { recursive: true, force: true })
       await rm(out, { recursive: true, force: true })
+    }
+  })
+})
+
+// v0.2.0-preview のあとに入った実寸の読み取り（#36）を、壊れたバイト列で
+// 揺さぶります。原稿の隣に置かれるファイルは著者が作ったものとはかぎらず、
+// 途中で切れていたり、まるで別の形式だったりします。読めないものは null に
+// 落ちるだけで、例外にも、寸法にならない値にもならないことを確かめます。
+// 桁を上げた走らせ方は `bun run fuzz`（scripts/fuzz.ts）です。
+
+function randomBytes(rand: () => number, length: number): Uint8Array {
+  const bytes = new Uint8Array(length)
+  for (let i = 0; i < length; i += 1) bytes[i] = Math.floor(rand() * 256)
+  return bytes
+}
+
+function codes(text: string): number[] {
+  const out: number[] = []
+  for (let i = 0; i < text.length; i += 1) out.push(text.charCodeAt(i))
+  return out
+}
+
+const HEADERS = [
+  [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+  codes('GIF89a'),
+  [0xff, 0xd8, 0xff, 0xe0],
+  codes('RIFF0000WEBPVP8 '),
+  codes('0000ftypavif'),
+  codes('<svg width="'),
+  [],
+]
+
+describe('image size fuzzing', () => {
+  it('reads a size or nothing from any bytes', () => {
+    const rand = mulberry32(2654435761)
+    for (let seed = 1; seed <= 20000; seed += 1) {
+      const header = HEADERS[Math.floor(rand() * HEADERS.length)] ?? []
+      const bytes = new Uint8Array([
+        ...header,
+        ...randomBytes(rand, Math.floor(rand() * 48)),
+      ]).subarray(0, Math.floor(rand() * (header.length + 48)) + 1)
+
+      const size = imageSize(bytes)
+      if (size === null) continue
+      const context = `seed ${seed} / ${JSON.stringify([...bytes].slice(0, 24))}`
+      assert.ok(Number.isFinite(size.width) && size.width > 0, `幅が寸法でない。${context}`)
+      assert.ok(Number.isFinite(size.height) && size.height > 0, `高さが寸法でない。${context}`)
     }
   })
 })

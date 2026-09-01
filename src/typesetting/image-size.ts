@@ -81,7 +81,15 @@ function ascii(bytes: Uint8Array, start: number, text: string): boolean {
   return true
 }
 
+/**
+ * 寸法として通す値。0 以下は寸法になりません。無限も弾きます —— SVG の
+ * `height="1..1"`（300 桁）と viewBox から縦横比で幅を出すと、掛け算が
+ * あふれて Infinity になり、`<img width="Infinity">` が組み上がりました。
+ */
 function sized(width: number, height: number): ImageSize | null {
+  if (!Number.isFinite(width) || !Number.isFinite(height)) {
+    return null
+  }
   return width > 0 && height > 0 ? { width, height } : null
 }
 
@@ -247,7 +255,11 @@ function svgLength(value: string | null): number | null {
   if (value === null) {
     return null
   }
-  const found = /^([+-]?(?:\d+\.?\d*|\.\d+))\s*([a-z]*)$/i.exec(value)
+  // 小数点のあとを `(?:\.\d*)?` に閉じ込めます。`\d+\.?\d*` と書くと、`12x` の
+  // ように単位で外れた値で `\d+` が 1 桁ずつ譲るたび `\d*` が残りを読み直し、
+  // 桁数の二乗の手間になります。ここへ来るのは原稿にある SVG ファイルの
+  // 先頭 64KB なので、桁を並べた width 属性ひとつでプレビューが止まりました。
+  const found = /^([+-]?(?:\d+(?:\.\d*)?|\.\d+))\s*([a-z]*)$/i.exec(value)
   if (found === null) {
     return null
   }
