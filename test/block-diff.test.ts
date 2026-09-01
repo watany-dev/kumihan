@@ -45,20 +45,21 @@ describe('diffSegments', () => {
 })
 
 describe('renderBlockDiff', () => {
-  it('wraps a changed pair with removed then added', () => {
-    const html = renderBlockDiff('A\n\nB', 'A\n\nC', (segment) => segment)
-    assert.equal(html, 'A\n<div class="diff-removed">B</div>\n<div class="diff-added">C</div>')
+  it('marks a changed pair on each block', () => {
+    const html = renderBlockDiff('A\n\nB', 'A\n\nC', renderMarkdownPiece)
+    assert.equal(html, '<p>A</p>\n<p class="diff-removed">B</p>\n<p class="diff-added">C</p>')
   })
 
-  it('merges consecutive dels and consecutive adds into one wrapper each', () => {
-    const html = renderBlockDiff('K\n\nD1\n\nD2', 'K\n\nA1\n\nA2', (segment) => segment)
+  it('marks consecutive changes on each block, not a wrapper', () => {
+    const html = renderBlockDiff('K\n\nD1\n\nD2', 'K\n\nA1\n\nA2', renderMarkdownPiece)
+    assert.equal(html.includes('<div class="diff-'), false)
     assert.equal(
       html,
-      'K\n<div class="diff-removed">D1\nD2</div>\n<div class="diff-added">A1\nA2</div>',
+      '<p>K</p>\n<p class="diff-removed">D1</p>\n<p class="diff-removed">D2</p>\n<p class="diff-added">A1</p>\n<p class="diff-added">A2</p>',
     )
   })
 
-  it('does not wrap unchanged segments', () => {
+  it('does not mark unchanged segments', () => {
     const html = renderBlockDiff(
       '# 見出し\n\n同じ段落。',
       '# 見出し\n\n同じ段落。',
@@ -69,8 +70,8 @@ describe('renderBlockDiff', () => {
   })
 
   it('does not treat a trailing newline on the last segment as a change', () => {
-    const html = renderBlockDiff('A\n\nB\n', 'A\n\nB\n\nC\n', (segment) => segment)
-    assert.equal(html, 'A\nB\n<div class="diff-added">C</div>')
+    const html = renderBlockDiff('A\n\nB\n', 'A\n\nB\n\nC\n', renderMarkdownPiece)
+    assert.equal(html, '<p>A</p>\n<p>B</p>\n<p class="diff-added">C</p>')
   })
 
   it('renders empty manuscripts to empty html', () => {
@@ -82,8 +83,15 @@ describe('renderBlockDiff', () => {
     const oldSrc = normalizeMarkdown(['```', 'foo', '', 'bar', '```'].join('\n'))
     const newSrc = normalizeMarkdown(['```', 'FOO', '', 'bar', '```'].join('\n'))
     const html = renderBlockDiff(oldSrc, newSrc, renderMarkdownPiece)
-    assert.match(html, /class="diff-removed"/)
-    assert.match(html, /class="diff-added"/)
-    assert.equal((html.match(/<pre>/g) ?? []).length, 2)
+    assert.match(html, /<pre class="diff-removed">/)
+    assert.match(html, /<pre class="diff-added">/)
+    assert.equal((html.match(/<pre\b/g) ?? []).length, 2)
+  })
+
+  it('marks every block inside a multi-block segment', () => {
+    const html = renderBlockDiff('', '## 節\n段落。', renderMarkdownPiece)
+    assert.match(html, /<h2 class="diff-added">節<\/h2>/)
+    assert.match(html, /<p class="diff-added">段落。<\/p>/)
+    assert.equal(html.includes('<div class="diff-'), false)
   })
 })

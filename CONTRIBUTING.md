@@ -40,8 +40,12 @@ GitHub Codespaces と Dev Container は Bun と Vite+ を入れ、`vp install --
 | `GET /magazine`              | `/magazine.html` と同じ                                      |
 | `GET /web.html`              | 同じ原稿を Web 記事スタイルで返す                            |
 | `GET /web`                   | `/web.html` と同じ                                           |
-| `GET /diff.html`             | 作業中の原稿と `HEAD` の区画差分（Web レイアウト）           |
+| `GET /diff.html`             | 作業中の原稿と `HEAD` の区画差分（組版レイアウト）           |
 | `GET /diff`                  | `/diff.html` と同じ                                          |
+| `GET /magazine-diff.html`    | 同じ差分を A4 2段組で返す                                    |
+| `GET /magazine-diff`         | `/magazine-diff.html` と同じ                                 |
+| `GET /web-diff.html`         | 同じ差分を Web 記事スタイルで返す                            |
+| `GET /web-diff`              | `/web-diff.html` と同じ                                      |
 | `GET /health`                | `{ "ok": true }`                                             |
 | `GET /events`                | 原稿が保存されたことを知らせる SSE（`text/event-stream`）    |
 | `GET /assets/typeset.css`    | 組版 CSS（1段 / 2段）                                        |
@@ -49,7 +53,7 @@ GitHub Codespaces と Dev Container は Bun と Vite+ を入れ、`vp install --
 | `GET /assets/reload.js`      | 自動リロードのスクリプト（プレビューの HTML だけが読み込む） |
 | `GET` 原稿ディレクトリの画像 | 相対パスの png / jpg / gif / webp / svg / avif               |
 
-`GET /diff` は git で追跡されている原稿ファイルのときだけ差分を返します。git が無い、リポジトリ外、未追跡、標準入力では案内ページ（200）になり、切替にも「差分」は出ません。`export` の 5 ファイルには含めません。比較はフェンス外の空行で区切った区画単位で、追加は `diff-added`、削除は `diff-removed` です。
+`GET /diff` は git で追跡されている原稿ファイルのときだけ差分を返します。git が無い、リポジトリ外、未追跡、標準入力では案内ページ（200）になり、切替にも「差分」は出ません。案内も、開いた経路のレイアウト（組版 / 2段 / Web）で返します。`export` の 5 ファイルには含めません。比較はフェンス外の空行で区切った区画単位で、追加は各ブロックの `diff-added`、削除は `diff-removed` です。削除を残すので、組版・2段の頁は通常プレビューとずれることがあります。
 
 `GET /` は毎回ファイルを読み直し、`Cache-Control: no-store` で返します。読み直した中身が前と同じときは組み直さず、変換結果を使い回します。
 

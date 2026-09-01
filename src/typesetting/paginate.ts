@@ -985,11 +985,19 @@ function tagNameOf(block: string): string {
 
 /** 画像だけの段落（`p:has(> img:only-child)`）か。2段組では段を抜く。 */
 function isImageParagraph(block: string): boolean {
-  if (!block.startsWith('<p><img')) {
+  if (tagNameOf(block) !== 'p') {
     return false
   }
-  const gt = block.indexOf('>', 7)
-  return gt !== -1 && block.slice(gt + 1) === '</p>'
+  const openEnd = block.indexOf('>')
+  if (openEnd === -1) {
+    return false
+  }
+  const inner = block.slice(openEnd + 1)
+  if (!inner.startsWith('<img')) {
+    return false
+  }
+  const imgEnd = inner.indexOf('>')
+  return imgEnd !== -1 && inner.slice(imgEnd + 1) === '</p>'
 }
 
 // `<` の次から始まるタグ名が name かどうか。slice を作らずに比べます。
@@ -1003,7 +1011,8 @@ function isTag(html: string, start: number, name: string): boolean {
   return after === 0x3e || after === 0x20 || after === 0x2f
 }
 
-function splitBlocks(html: string): string[] {
+/** HTML 断片をトップレベルのブロックに分ける。頁分けと差分の印付けが使う。 */
+export function splitBlocks(html: string): string[] {
   const blocks: string[] = []
   let i = 0
 

@@ -85,8 +85,16 @@ body.web {
   background: #e60012;
 }
 
+.mode-switch-link[aria-pressed="true"] {
+  background: #f1f8f2;
+}
+
 .mode-switch-link:not(.is-active):hover {
   background: #f7f7f7;
+}
+
+.mode-switch-link[aria-pressed="true"]:hover {
+  background: #e4f0e4;
 }
 
 .mode-switch-link:focus-visible {
@@ -127,9 +135,13 @@ body.web {
   contain-intrinsic-size: auto 3rem;
 }
 
+/*
+ * 差分は各ブロックに class を付ける。左罫と背景と padding はブロック単位。
+ * 変更された h2 は、ここの左罫がサイトの赤いアクセント（5px）より詳細度で
+ * 勝つので、差分色に置き換わる。
+ */
 .article .diff-added,
 .article .diff-removed {
-  margin: 0 0 1.25em;
   padding: 0.55em 0.9em 0.55em 0.85em;
   border-left: 4px solid;
 }
@@ -145,9 +157,11 @@ body.web {
   color: #5c3333;
 }
 
-.article .diff-added > :last-child,
-.article .diff-removed > :last-child {
-  margin-bottom: 0;
+.article ul.diff-added,
+.article ol.diff-added,
+.article ul.diff-removed,
+.article ol.diff-removed {
+  padding-left: calc(1.5em + 0.85em);
 }
 
 .article h1,

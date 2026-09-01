@@ -67,8 +67,12 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
   app.get('/magazine', (c) => serveManuscript(c, 'magazine'))
   app.get('/web.html', (c) => serveManuscript(c, 'web'))
   app.get('/web', (c) => serveManuscript(c, 'web'))
-  app.get('/diff.html', (c) => serveDiff(c))
-  app.get('/diff', (c) => serveDiff(c))
+  app.get('/diff.html', (c) => serveDiff(c, 'print'))
+  app.get('/diff', (c) => serveDiff(c, 'print'))
+  app.get('/magazine-diff.html', (c) => serveDiff(c, 'magazine'))
+  app.get('/magazine-diff', (c) => serveDiff(c, 'magazine'))
+  app.get('/web-diff.html', (c) => serveDiff(c, 'web'))
+  app.get('/web-diff', (c) => serveDiff(c, 'web'))
 
   // 原稿が変わらないかぎり、組んだ結果を使い回します。
   //
@@ -130,42 +134,61 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
   const DIFF_UNAVAILABLE =
     '<p>この原稿では差分を表示できません。git リポジトリで追跡されているファイルを指定してください。</p>'
 
+  // 差分の断片は 3 モード共通。通常プレビューの cachedDocuments とは別で、
+  // 同じモードの通常表示と衝突させない。
   let cachedDiffKey = ''
-  let cachedDiffHtml = ''
+  let cachedDiffFragment = ''
+  const cachedDiffDocuments = new Map<PreviewMode, string>()
 
-  async function diffPage(markdown: string, git: GitTrackedFile): Promise<string | null> {
+  async function diffPage(
+    markdown: string,
+    git: GitTrackedFile,
+    mode: PreviewMode,
+  ): Promise<string | null> {
     const [version, head] = await Promise.all([versionOf(markdown), readHeadFile(git)])
     if (head === null) return null
 
     const key = `${head.oid}:${version}`
-    if (key === cachedDiffKey) return cachedDiffHtml
+    if (key !== cachedDiffKey) {
+      const fragment = renderBlockDiff(
+        normalizeMarkdown(head.text),
+        normalizeMarkdown(markdown),
+        renderMarkdownPiece,
+      )
+      cachedDiffFragment = await withImageSizes(fragment, manuscript.root)
+      cachedDiffKey = key
+      cachedDiffDocuments.clear()
+    }
 
-    const fragment = renderBlockDiff(
-      normalizeMarkdown(head.text),
-      normalizeMarkdown(markdown),
-      renderMarkdownPiece,
-    )
-    const sized = await withImageSizes(fragment, manuscript.root)
-    const html = renderDocument(sized, {
+    const cached = cachedDiffDocuments.get(mode)
+    if (cached !== undefined) {
+      return cached
+    }
+
+    const html = renderDocument(cachedDiffFragment, {
       title,
       language,
-      mode: 'web',
+      mode,
       liveReload: version,
       diffLink: true,
       diffActive: true,
     })
-    cachedDiffKey = key
-    cachedDiffHtml = html
+    cachedDiffDocuments.set(mode, html)
     return html
   }
 
-  async function unavailableDiffPage(markdown: string, diffLink: boolean): Promise<string> {
+  async function unavailableDiffPage(
+    markdown: string,
+    mode: PreviewMode,
+    diffLink: boolean,
+  ): Promise<string> {
     return renderDocument(DIFF_UNAVAILABLE, {
       title,
       language,
-      mode: 'web',
+      mode,
       liveReload: await versionOf(markdown),
       diffLink,
+      diffActive: diffLink,
     })
   }
 
@@ -200,7 +223,7 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
     }
   }
 
-  async function serveDiff(c: Context) {
+  async function serveDiff(c: Context, mode: PreviewMode) {
     let markdown: string
     try {
       markdown = await manuscript.read()
@@ -210,12 +233,12 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
 
     const git = await gitSource()
     if (git === null) {
-      return c.body(await unavailableDiffPage(markdown, false), 200, HTML_HEADERS)
+      return c.body(await unavailableDiffPage(markdown, mode, false), 200, HTML_HEADERS)
     }
 
-    const html = await diffPage(markdown, git)
+    const html = await diffPage(markdown, git, mode)
     if (html === null) {
-      return c.body(await unavailableDiffPage(markdown, true), 200, HTML_HEADERS)
+      return c.body(await unavailableDiffPage(markdown, mode, true), 200, HTML_HEADERS)
     }
     return c.body(html, 200, HTML_HEADERS)
   }
