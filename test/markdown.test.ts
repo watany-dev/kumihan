@@ -89,8 +89,19 @@ describe('renderMarkdown', () => {
   })
 
   it('renders an image', () => {
-    assert.equal(renderMarkdown('![図](a.png)'), '<p><img src="a.png" alt="図"></p>')
-    assert.equal(renderMarkdown('![](a.png)'), '<p><img src="a.png" alt=""></p>')
+    // 画像 1 枚だけの段落は図版になり、alt がキャプションに回ります。
+    assert.equal(
+      renderMarkdown('![図](a.png)'),
+      '<figure><img src="a.png" alt="図">\n<figcaption>図</figcaption></figure>',
+    )
+    // alt が空でもキャプションは出します（図番号だけが付きます）。
+    assert.equal(
+      renderMarkdown('![](a.png)'),
+      '<figure><img src="a.png" alt="">\n<figcaption></figcaption></figure>',
+    )
+    // 地の文に混ざった画像は段落のままです。
+    assert.equal(renderMarkdown('本文 ![図](a.png)'), '<p>本文 <img src="a.png" alt="図"></p>')
+    assert.equal(renderMarkdown('![図](a.png) 本文'), '<p><img src="a.png" alt="図"> 本文</p>')
     assert.equal(renderMarkdown('Hello!'), '<p>Hello!</p>')
   })
 

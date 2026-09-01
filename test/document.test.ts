@@ -156,6 +156,37 @@ describe('renderDocument', () => {
   })
 })
 
+describe('図版', () => {
+  const source = ['![一枚目](a.png)', '本文 ![文中](b.png) です。', '![](c.png)'].join('\n\n')
+
+  it('numbers the figures in manuscript order, in every mode', () => {
+    for (const mode of ['print', 'magazine', 'web'] as const) {
+      const html = renderDocument(renderMarkdown(source), { mode })
+      const captions = [...html.matchAll(/<figcaption[^>]*>([\s\S]*?)<\/figcaption>/g)].map(
+        (found) => found[1],
+      )
+
+      assert.deepEqual(captions, [
+        '<span class="figure-number">図 1　</span>一枚目',
+        // alt が空でも番号は付きます。
+        '<span class="figure-number">図 2</span>',
+      ])
+      // 文中に混ざった画像は段落のままで、番号も取りません。
+      assert.match(html, /<p>本文 <img src="b.png" alt="文中"> です。<\/p>/)
+    }
+  })
+
+  it('keeps the numbering across papers', () => {
+    const filler = Array.from({ length: 40 }, () => '長い段落です。'.repeat(20)).join('\n\n')
+    const html = renderDocument(renderMarkdown(`![前](a.png)\n\n${filler}\n\n![後](b.png)`))
+    const papers = html.split('<div class="paper"').length - 1
+
+    assert.ok(papers > 1)
+    assert.match(html, /<span class="figure-number">図 1　<\/span>前/)
+    assert.match(html, /<span class="figure-number">図 2　<\/span>後/)
+  })
+})
+
 describe('ノンブルと柱', () => {
   const long = Array.from({ length: 90 }, () => '短い段落です。').join('\n\n')
 

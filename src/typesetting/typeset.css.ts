@@ -168,12 +168,51 @@ body {
   /*
    * 図の高さは段 1 本まで。原稿に対して実寸で組む必要はないので、大きな写真は
    * ここまで縮めます（縦横比はそのまま）。段落の下の余白（0.9em）を引いてある
-   * ので、図だけの段落は余白を足しても段 1 本にちょうど収まります。
+   * ので、地の文に混ざった画像は余白を足しても段 1 本に収まります。図版
+   *（figure）はキャプションのぶんさらに低く、下の .typeset figure img です。
    *
    * 頁分け（paginate.ts の imageMaxLines）はこの高さで見積もります。両者が
    * ずれると図のある頁があふれるので、test/paginate.test.ts が一致を見ます。
    */
   max-height: calc(35 * 1.9em - 0.9em);
+}
+
+/*
+ * 図版。画像 1 枚だけの段落は figure + figcaption に組まれます
+ *（src/markdown/render.ts）。キャプションはゴシックで本文より小さく、
+ * 図の下に中央で置きます。
+ */
+.typeset figure {
+  margin: 0 0 0.9em;
+  text-align: center;
+}
+
+/*
+ * 図の高さは段 1 本から、下の余白（0.9em）とキャプション 1 行（0.5 + 1.6 を
+ * 0.85 の級数で = 1.785em）を引いた高さまで。ここまで縮めておけば、図版は
+ * キャプションごと段 1 本にちょうど収まります。頁分け（paginate.ts の
+ * figureImageMaxLines）はこの高さで見積もります。
+ */
+.typeset figure img {
+  max-height: calc(35 * 1.9em - 2.685em);
+}
+
+.typeset figcaption {
+  margin-top: 0.5em;
+  font-family:
+    "Hiragino Kaku Gothic ProN",
+    "Yu Gothic",
+    "YuGothic",
+    sans-serif;
+  font-size: 0.85em;
+  line-height: 1.6;
+  text-align: center;
+  color: #4a453d;
+}
+
+/* 図番号（「図 1」）。振るのは render-page.ts で、原稿の順です。 */
+.typeset .figure-number {
+  font-weight: 600;
 }
 
 .typeset blockquote {
@@ -287,11 +326,15 @@ body {
   max-height: calc(40 * 1.75em - 0.9em);
 }
 
+.typeset.cols-2 figure img {
+  max-height: calc(40 * 1.75em - 2.685em);
+}
+
 .typeset.cols-2 h1,
 .typeset.cols-2 h1 + p,
 .typeset.cols-2 pre,
 .typeset.cols-2 hr,
-.typeset.cols-2 p:has(> img:only-child) {
+.typeset.cols-2 figure {
   column-span: all;
 }
 

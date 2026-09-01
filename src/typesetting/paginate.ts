@@ -143,10 +143,10 @@ function blocksOf(html: string, layout: PageLayout): CountCache & { blocks: stri
     const overlap = layout.columns > 1 ? 0 : collapsedLead(previous, tag, layout)
     counts.push(blockLines(block, layout) - overlap)
     overlaps.push(overlap)
-    flows.push(flowOf(tag, block, previous, layout))
+    flows.push(flowOf(tag, previous, layout))
     // 紙は別々の article に組みます。`h1 + p` のような隣り合わせは紙をまたいで
     // 効かないので、紙の先頭に来たときは前のブロックが無いものとして数えます。
-    startFlows.push(flowOf(tag, block, '', layout))
+    startFlows.push(flowOf(tag, '', layout))
     previous = tag
   }
 
@@ -423,6 +423,11 @@ const FULL = 2
 
 // typeset.css の寸法。単位のない数は em（その要素の級数基準）。
 const PARAGRAPH_MARGIN_EM = 0.9
+// 図版（figure）。下の余白は段落と同じで、キャプションはゴシックの小さめ。
+const FIGURE_MARGIN_EM = 0.9
+const CAPTION_RATIO = 0.85
+const CAPTION_LINE_HEIGHT = 1.6
+const CAPTION_MARGIN_TOP_EM = 0.5
 const HEADING_LINE_HEIGHT = 1.45
 const H1_POINTS = 18
 const H1_MARGIN_BOTTOM_EM = 1.1
@@ -522,6 +527,10 @@ function metricsOf(tag: string, layout: PageLayout): BlockMetrics {
       return heading(H3_POINTS, H3_MARGIN_TOP_EM, H3_MARGIN_BOTTOM_EM, 0, 0, layout)
     case 'p':
       return plain({ leadBottom: toLines(PARAGRAPH_MARGIN_EM, body, layout) })
+    // 図版の高さは figureLines が別に数えます。ここで要るのは、次のブロックと
+    // 重なる下の余白だけです。
+    case 'figure':
+      return plain({ leadBottom: toLines(FIGURE_MARGIN_EM, body, layout) })
     case 'ul':
     case 'ol':
       return plain({
@@ -584,6 +593,9 @@ function collapsedLead(previousTag: string, tag: string, layout: PageLayout): nu
  */
 export function blockLines(block: string, layout: PageLayout): number {
   const tag = tagNameOf(block)
+  if (tag === 'figure') {
+    return figureLines(block, layout)
+  }
   const metrics = metricsOf(tag, layout)
 
   // 1 行に入る幅。全角 1 字を FULL として測るので、段の字数もその単位に直す。
@@ -627,6 +639,57 @@ export function imageMaxLines(layout: PageLayout): number {
   return layout.lines / layout.columns - PARAGRAPH_MARGIN_EM / layout.lineHeight
 }
 
+/** キャプション 1 行ぶんの高さ（本文行）。上の余白を含みます。 */
+function captionLead(lines: number, layout: PageLayout): number {
+  return toLines(
+    CAPTION_MARGIN_TOP_EM + CAPTION_LINE_HEIGHT * lines,
+    CAPTION_RATIO * layout.bodyPoints,
+    layout,
+  )
+}
+
+/**
+ * 図版の中の画像に許される高さ（本文行）。`.typeset figure img { max-height }`
+ * にあたります。段 1 本から、下の余白と 1 行のキャプションを引いた残りです。
+ * ここまで縮めておけば、図版はキャプションごと段 1 本にちょうど収まります。
+ */
+export function figureImageMaxLines(layout: PageLayout): number {
+  return (
+    layout.lines / layout.columns - FIGURE_MARGIN_EM / layout.lineHeight - captionLead(1, layout)
+  )
+}
+
+/**
+ * 図版（`<figure>`）の組み上がりの高さ（本文行）。
+ *
+ * 画像とキャプションは級数が違うので、ブロック 1 つぶんの見積り（BlockMetrics）
+ * では表せません。画像は実寸から、キャプションはゴシックの小さい級数で折り返しを
+ * 数え、下の余白と足します。キャプションは alt が空でも図番号が出るので、
+ * 必ず 1 行は取ります。
+ */
+function figureLines(block: string, layout: PageLayout): number {
+  // 2段組の図版は段を抜くので、幅も版面いっぱいです。
+  const widthMm = layout.columns > 1 ? layout.textWidthMm : layout.columnWidthMm
+  // 画像は本文 1 行より低くても 1 行を取ります（地の文に混ざった画像と同じ）。
+  // 寸法を探す相手は図版の中の `<img>` 1 つだけです。キャプションの地の文は
+  // エスケープ済みで `"` を持てないので、`width="` に化けることはありません。
+  const image = Math.max(1, imageLines(block, widthMm, figureImageMaxLines(layout), layout))
+
+  // キャプションの 1 行に入る幅。図版の幅ぶんの全角文字を、キャプションの
+  // 級数に直したもの。頭の図番号は render-page.ts が書き入れるので、字数には
+  // すでに入っています。
+  const capacity = Math.max(FULL, (FULL * columnChars(widthMm, layout.bodyPoints)) / CAPTION_RATIO)
+  const lines = Math.max(1, textRuns(captionOf(block), capacity).lines)
+
+  return toLines(FIGURE_MARGIN_EM, layout.bodyPoints, layout) + image + captionLead(lines, layout)
+}
+
+/** 図版のキャプション。`<figcaption>` が無ければ空文字。 */
+function captionOf(block: string): string {
+  const start = block.indexOf('<figcaption>')
+  return start === -1 ? '' : block.slice(start)
+}
+
 /**
  * ブロックの中の画像が、地の文として数えた 1 行より高いぶん（本文行）。
  *
@@ -639,9 +702,9 @@ function imageExtraLines(block: string, layout: PageLayout): number {
     return 0
   }
 
-  // 2段組で段を抜く図（図だけの段落）は版面いっぱいまで、それ以外は段の幅まで。
-  const widthMm =
-    layout.columns > 1 && isImageParagraph(block) ? layout.textWidthMm : layout.columnWidthMm
+  // 地の文に混ざった画像は段の幅まで（1段組では版面の幅と同じ）。段を抜く図は
+  // figure になり、figureLines が別に数えます。
+  const widthMm = layout.columnWidthMm
 
   let extra = 0
   while (start !== -1) {
@@ -649,7 +712,7 @@ function imageExtraLines(block: string, layout: PageLayout): number {
     if (end === -1) {
       break
     }
-    const lines = imageLines(block.slice(start, end + 1), widthMm, layout)
+    const lines = imageLines(block.slice(start, end + 1), widthMm, imageMaxLines(layout), layout)
     if (lines > 1) {
       extra += lines - 1
     }
@@ -664,7 +727,7 @@ function imageExtraLines(block: string, layout: PageLayout): number {
  * 幅が入る場所を超えていれば縦横比のまま縮め（`max-width: 100%`）、それでも
  * 段より高ければ高さで抑えます（`max-height`）。
  */
-function imageLines(tag: string, widthMm: number, layout: PageLayout): number {
+function imageLines(tag: string, widthMm: number, maxLines: number, layout: PageLayout): number {
   const width = attributeNumber(tag, ' width="')
   const height = attributeNumber(tag, ' height="')
   if (width <= 0 || height <= 0) {
@@ -673,8 +736,7 @@ function imageLines(tag: string, widthMm: number, layout: PageLayout): number {
 
   const drawnMm = Math.min(width * MM_PER_PIXEL, widthMm)
   const lines = (drawnMm * height) / width / lineMm(layout)
-  const max = imageMaxLines(layout)
-  return lines > max ? max : lines
+  return lines > maxLines ? maxLines : lines
 }
 
 /** タグの属性の数。` width="1200"` のように、名前は前後まで含めて渡します。 */
@@ -713,7 +775,7 @@ function keepsWithNext(flow: number): boolean {
  * typeset.css の break-inside / break-after / column-span を、
  * 段への詰め込み方に読み替えます。段抜きは 2段組のときだけです。
  */
-function flowOf(tag: string, block: string, previousTag: string, layout: PageLayout): number {
+function flowOf(tag: string, previousTag: string, layout: PageLayout): number {
   const spans = layout.columns > 1
   switch (tag) {
     case 'h1':
@@ -727,8 +789,10 @@ function flowOf(tag: string, block: string, previousTag: string, layout: PageLay
       return spans ? FLOW_SPAN : FLOW_NORMAL
     case 'table':
       return FLOW_KEEP
+    case 'figure':
+      return spans ? FLOW_SPAN : FLOW_NORMAL
     case 'p':
-      return spans && (previousTag === 'h1' || isImageParagraph(block)) ? FLOW_SPAN : FLOW_NORMAL
+      return spans && previousTag === 'h1' ? FLOW_SPAN : FLOW_NORMAL
     default:
       return FLOW_NORMAL
   }
@@ -999,23 +1063,6 @@ function tagNameOf(block: string): string {
   }
   const end = tagNameEnd(block, 1)
   return end === 1 ? '' : block.slice(1, end).toLowerCase()
-}
-
-/** 画像だけの段落（`p:has(> img:only-child)`）か。2段組では段を抜く。 */
-function isImageParagraph(block: string): boolean {
-  if (tagNameOf(block) !== 'p') {
-    return false
-  }
-  const openEnd = block.indexOf('>')
-  if (openEnd === -1) {
-    return false
-  }
-  const inner = block.slice(openEnd + 1)
-  if (!inner.startsWith('<img')) {
-    return false
-  }
-  const imgEnd = inner.indexOf('>')
-  return imgEnd !== -1 && inner.slice(imgEnd + 1) === '</p>'
 }
 
 // `<` の次から始まるタグ名が name かどうか。slice を作らずに比べます。

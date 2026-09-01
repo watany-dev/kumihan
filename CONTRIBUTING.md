@@ -105,6 +105,8 @@ const app = createPreviewApp({
 
 画像は組む前に実寸を読みます。`withImageSizes(fragment, root)`（`src/typesetting/measure-images.ts`）が、原稿からの相対パスで見つかった画像の縦横を先頭のバイト列から読み（`src/typesetting/image-size.ts`）、断片の `<img>` に `width` / `height` として書き入れます。頁分け（`paginate.ts`）はこれを見て図の高さを本文行に換算し、ブラウザは読み込む前に図の場所を空けられます。読めなかった画像や外部の URL は属性が付かず、従来どおり 1 行として数えます。`exportSite(markdown)` は原稿の場所を持たないので実寸を読みません（`writeExport` とプレビューは読みます）。
 
+画像 1 枚だけの段落は `renderMarkdown` が `figure` + `figcaption` に組み替え、alt をキャプションに回します。図番号（「図 1」）を振るのは `renderDocument` です。区画ごとに使い回す増分変換に番号を持ち込むと、図が 1 つ増えるたびに後ろの区画をすべて変換し直すことになるからです。CSS のカウンタも使えません。紙（`.paper`）が持つ `content-visibility: auto` は style containment を伴い、カウンタが紙ごとに 1 に戻ります。番号を出すかどうかは CSS が決めていて、`web.css` は `.figure-number` を消しています。
+
 変換済みの断片を他の用途にも使うときは、`exportFiles(fragment)` に断片を渡すと Markdown の変換をやり直さずに書き出す一式（`pathname`・`body`・`contentType`）が得られます。`writeExport` はこの形で、変換 1 回の結果を HTML の組み立てと画像の収集の両方に使っています。
 
 原稿の取り出し方は `src/manuscript.ts` の `Manuscript`（`root`・`read()`・任意の `watch()`）にまとめてあります。ファイルから読む原稿は `file` に絶対パスを持ち、プレビューの差分ビューが git を探るために使います。`watch` はファイル原稿だけが持ち、プレビューの `/events` が購読中にだけ使います。`createPreviewApp` と `writeExport` はパスの文字列も `Manuscript` も受け取ります。標準入力のように元ファイルが無い原稿は `memoryManuscript` で包み、画像の基準ディレクトリを明示します。

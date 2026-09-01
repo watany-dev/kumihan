@@ -87,7 +87,12 @@ describe('unsafe image URL rejection', () => {
   it('escapes alt text', () => {
     const html = renderMarkdown('![<script>](a.png)')
     assert.equal(html.includes('<script>'), false)
-    assert.equal(html, '<p><img src="a.png" alt="&lt;script&gt;"></p>')
+    // キャプションにも同じエスケープ済みの文字列が回ります。
+    assert.equal(
+      html,
+      '<figure><img src="a.png" alt="&lt;script&gt;">\n' +
+        '<figcaption>&lt;script&gt;</figcaption></figure>',
+    )
   })
 
   it('does not emit a raw img tag from the manuscript', () => {

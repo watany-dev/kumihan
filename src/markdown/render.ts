@@ -643,9 +643,30 @@ function parseParagraph(
   // 置き換えると、コードスパンの中身にまで <br> が入り込みます。
   const html = renderInline(joined)
   return {
-    html: `<p>${html}</p>`,
+    html: figure(html) ?? `<p>${html}</p>`,
     next: i,
   }
+}
+
+/**
+ * 中身が画像 1 枚だけの段落を図版に組み替えます。そうでなければ null。
+ *
+ * alt はキャプション（`<figcaption>`）に回します。属性として書いたあとの
+ * 文字列をそのまま置くので、エスケープはそこで済んでいます（`"` は `&quot;`、
+ * `<` は `&lt;`）。地の文に混ざった画像は段落のままです。
+ *
+ * alt が空でも figcaption は出します。中身は空のまま、図番号だけが付きます
+ *（番号を振るのは renderDocument です）。
+ */
+function figure(html: string): string | null {
+  // 画像は `<img src="..." alt="...">` の形で、属性値はエスケープ済みです。
+  // つまり `>` はタグの終わりにしか無く、それが末尾なら段落は画像 1 枚だけです。
+  if (!html.startsWith('<img ') || html.indexOf('>') !== html.length - 1) {
+    return null
+  }
+  // alt は renderInline が最後に書く属性なので、`">` の手前までが中身です。
+  const alt = html.slice(html.indexOf(' alt="') + 6, -2)
+  return `<figure>${html}\n<figcaption>${alt}</figcaption></figure>`
 }
 
 // ブロックを開始しうる先頭文字（水平線は字下げを許すため空白も含む）。

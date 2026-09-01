@@ -657,6 +657,21 @@ function textOnly(html: string): string {
   return html.replace(/<[^>]*>/g, '').replace(/\s+/g, '')
 }
 
+/**
+ * 図番号（renderDocument が振る「図 1」）を外す。断片には無い文字なので、
+ * 組み上げの前後で地の文を比べるときは、こちらで揃えます。
+ */
+function withoutFigureNumbers(html: string): string {
+  return html.replaceAll(/<span class="figure-number">[^<]*<\/span>/g, '')
+}
+
+/** 紙に載った図番号を、出てきた順に並べたもの。 */
+function figureNumbers(html: string): number[] {
+  return [...html.matchAll(/<span class="figure-number">図 (\d+)/g)].map((found) =>
+    Number(found[1]),
+  )
+}
+
 /** タグだけを順に並べたもの。要素が消えたり増えたりしていないか見る。 */
 function tagStream(html: string): string {
   return (html.match(/<[^>]*>/g) ?? []).join('')
@@ -1126,10 +1141,19 @@ function fuzzDocument(failures: Failures, base: number, cases: number): void {
         // 紙に載った地の文は、組み上げの前の断片と同じ。組み上げは頁分けを
         // 通すので、ここが崩れれば本文の落ちや重複です。
         failures.check(
-          textOnly(articles(html).join('')) === textOnly(fragment),
+          textOnly(withoutFigureNumbers(articles(html).join(''))) === textOnly(fragment),
           'document/text',
           seed,
           () => `${mode}: ${JSON.stringify(source.slice(0, 160))}`,
+        )
+
+        // 図番号は原稿の順に 1 から振られ、紙をまたいでも続きます。
+        const figures = figureNumbers(articles(html).join(''))
+        failures.check(
+          figures.every((number, at) => number === at + 1),
+          'document/figures',
+          seed,
+          () => `${mode}: ${figures.join(',')} / ${JSON.stringify(source.slice(0, 160))}`,
         )
 
         // 切替は 3 つのモードと、差分ビューでは差分のトグル。
