@@ -224,6 +224,29 @@ body.web {
   height: auto;
 }
 
+/*
+ * 図版は組版と同じ組み替え（figure + figcaption）で来ます。Web の記事では
+ * 図番号を出さないので、::before は置きません。
+ */
+.article figure {
+  margin: 0 0 1.6em;
+  text-align: center;
+}
+
+/* Web の記事では図番号を出しません。番号だけのキャプションは丸ごと消します。 */
+.article .figure-number,
+.article figcaption.number-only {
+  display: none;
+}
+
+.article figcaption {
+  margin-top: 0.6em;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #6b6b6b;
+  text-align: center;
+}
+
 .article a:hover {
   text-decoration: underline;
   text-underline-offset: 0.18em;

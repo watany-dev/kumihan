@@ -26,7 +26,44 @@ export interface RenderDocumentOptions {
   diffActive?: boolean
 }
 
-export function renderDocument(html: string, options?: RenderDocumentOptions): string {
+/**
+ * 図版に番号を振る。原稿の順に「図 1」「図 2」と数えます。
+ *
+ * 番号は変換（renderMarkdown）ではなく、ここで書き入れます。区画ごとに使い
+ * 回す増分変換に番号を持ち込むと、図が 1 つ増えるたびに後ろの区画をすべて
+ * 変換し直すことになるからです。組み上がりの見積り（paginate）はこの文字列を
+ * 見るので、番号を入れるのは頁分けより前です。
+ *
+ * CSS のカウンタは使えません。紙（`.paper`）は画面外の頁を組まないよう
+ * `content-visibility: auto` を持ち、これは style containment を伴うので、
+ * カウンタが紙ごとに閉じて 1 に戻ります。
+ *
+ * 番号を出すかどうかは CSS が決めます（web.css は `.figure-number` を消します）。
+ */
+function numberFigures(html: string): string {
+  if (!html.includes(CAPTION_OPEN)) {
+    return html
+  }
+  let number = 0
+  return html.replace(CAPTION, (found) => {
+    number += 1
+    if (found === CAPTION_OPEN) {
+      // 説明のある図は、番号との間を全角の空きで離します。
+      return `${CAPTION_OPEN}<span class="figure-number">図 ${number}　</span>`
+    }
+    // alt を書かなかった図は番号だけ。空きを入れると中央に置いた番号がずれます。
+    // Web の記事は番号を出さないので、まるごと消せるよう印を付けておきます。
+    return `<figcaption class="number-only"><span class="figure-number">図 ${number}</span></figcaption>`
+  })
+}
+
+// 番号を入れる場所。alt を書かなかった図のキャプションは空で、閉じタグごと
+// 当たります。
+const CAPTION = /<figcaption>(?:<\/figcaption>)?/g
+const CAPTION_OPEN = '<figcaption>'
+
+export function renderDocument(fragment: string, options?: RenderDocumentOptions): string {
+  const html = numberFigures(fragment)
   const title = escapeHtml(options?.title ?? 'Typeset Preview')
   const language = escapeHtml(options?.language ?? 'ja')
   const mode: PreviewMode =

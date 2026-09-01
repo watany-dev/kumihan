@@ -78,6 +78,8 @@ const ALLOWED_TAGS = new Set([
   'hr',
   'br',
   'img',
+  'figure',
+  'figcaption',
   'blockquote',
   'ul',
   'ol',

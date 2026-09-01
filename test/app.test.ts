@@ -41,7 +41,9 @@ describe('preview app', () => {
     assert.match(css, /contain-intrinsic-size:\s*auto 210mm auto 297mm/)
     assert.match(css, /content-visibility:\s*visible/)
     assert.match(css, /max-width:\s*100%/)
-    assert.match(css, /p:has\(> img:only-child\)/)
+    // 図版は 2段でも段を抜き、キャプションは図番号を持つ。
+    assert.match(css, /\.typeset\.cols-2 figure \{\n {2}column-span: all;/)
+    assert.match(css, /\.typeset \.figure-number \{/)
   })
 
   it('serves web article css', async () => {

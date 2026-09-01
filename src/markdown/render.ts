@@ -643,9 +643,42 @@ function parseParagraph(
   // 置き換えると、コードスパンの中身にまで <br> が入り込みます。
   const html = renderInline(joined)
   return {
-    html: `<p>${html}</p>`,
+    html: figure(html) ?? `<p>${html}</p>`,
     next: i,
   }
+}
+
+/**
+ * 中身が画像 1 枚だけの段落を図版に組み替えます。そうでなければ null。
+ *
+ * alt はキャプション（`<figcaption>`）に回します。属性として書いたあとの
+ * 文字列をそのまま置くので、エスケープはそこで済んでいます（`"` は `&quot;`、
+ * `<` は `&lt;`）。地の文に混ざった画像は段落のままです。
+ *
+ * 図番号は HTML に焼かず、CSS のカウンタが振ります（typeset.css）。番号を
+ * ここで書くと、図が 1 つ増えるたびに後ろの区画をすべて変換し直すことになり、
+ * 区画ごとの使い回し（増分変換）が効かなくなります。
+ *
+ * alt が空でも figcaption は出します。中身は空のまま、番号だけが付きます。
+ */
+function figure(html: string): string | null {
+  // 画像は `<img src="..." alt="...">` の形で、属性値はエスケープ済みです。
+  // つまり `>` はタグの終わりにしか無く、それが末尾なら段落は画像 1 枚だけです。
+  if (!html.startsWith('<img ') || html.indexOf('>') !== html.length - 1) {
+    return null
+  }
+  return `<figure>${html}\n<figcaption>${altOf(html)}</figcaption></figure>`
+}
+
+function altOf(tag: string): string {
+  const start = tag.indexOf(' alt="')
+  /* v8 ignore next -- renderInline の <img> は必ず alt を持つ */
+  if (start === -1) return ''
+  const from = start + 6
+  const end = tag.indexOf('"', from)
+  /* v8 ignore next -- 属性値は必ず閉じる */
+  if (end === -1) return ''
+  return tag.slice(from, end)
 }
 
 // ブロックを開始しうる先頭文字（水平線は字下げを許すため空白も含む）。

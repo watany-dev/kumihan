@@ -48,6 +48,8 @@ const ELEMENTS = new Map<string, ReadonlySet<string>>([
   ['td', new Set(['class'])],
   ['a', new Set(['href'])],
   ['img', new Set(['src', 'alt'])],
+  ['figure', new Set()],
+  ['figcaption', new Set()],
 ])
 
 const SAFE_HREF_SCHEME = new Set(['http', 'https', 'mailto'])
