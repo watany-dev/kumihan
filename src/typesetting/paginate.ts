@@ -96,6 +96,10 @@ interface CountCache {
   lineHeight: number
   counts: number[]
   flows: number[]
+  /** counts から引いた重なり。紙の先頭に来たブロックには戻します。 */
+  overlaps: number[]
+  /** 紙の先頭に来たときの流し方。前のブロックとの並びで決まるぶんが外れます。 */
+  startFlows: number[]
 }
 
 let cachedHtml: string | null = null
@@ -122,6 +126,8 @@ function blocksOf(html: string, layout: PageLayout): CountCache & { blocks: stri
 
   const counts: number[] = []
   const flows: number[] = []
+  const overlaps: number[] = []
+  const startFlows: number[] = []
   let previous = ''
   for (const block of cachedBlocks) {
     const tag = tagNameOf(block)
@@ -136,7 +142,11 @@ function blocksOf(html: string, layout: PageLayout): CountCache & { blocks: stri
     // 最初のブロックは previous が空で、重なりはそのまま 0 になります。
     const overlap = layout.columns > 1 ? 0 : collapsedLead(previous, tag, layout)
     counts.push(blockLines(block, layout) - overlap)
+    overlaps.push(overlap)
     flows.push(flowOf(tag, block, previous, layout))
+    // 紙は別々の article に組みます。`h1 + p` のような隣り合わせは紙をまたいで
+    // 効かないので、紙の先頭に来たときは前のブロックが無いものとして数えます。
+    startFlows.push(flowOf(tag, block, '', layout))
     previous = tag
   }
 
@@ -148,6 +158,8 @@ function blocksOf(html: string, layout: PageLayout): CountCache & { blocks: stri
     lineHeight: layout.lineHeight,
     counts,
     flows,
+    overlaps,
+    startFlows,
   }
   cachedCounts.push(entry)
   if (cachedCounts.length > 2) {
@@ -169,7 +181,7 @@ function blocksOf(html: string, layout: PageLayout): CountCache & { blocks: stri
  * 紙を確定させる前に、末尾を見て泣き別れを直します（`withoutTrailingHeading`）。
  */
 export function paginate(html: string, layout: PageLayout): string[] {
-  const { blocks, counts, flows } = blocksOf(html, layout)
+  const { blocks, counts, flows, overlaps, startFlows } = blocksOf(html, layout)
   if (blocks.length === 0) {
     return ['']
   }
@@ -177,7 +189,7 @@ export function paginate(html: string, layout: PageLayout): string[] {
   const pages: string[] = []
   let start = 0
   while (start < blocks.length) {
-    let end = pageEnd(counts, flows, start, layout)
+    let end = pageEnd(counts, flows, overlaps, startFlows, start, layout)
     // 最後の紙には送り先がありません。見出しだけの紙を作らないよう、そのまま置きます。
     if (end < blocks.length) {
       end = withoutTrailingHeading(flows, start, end)
@@ -196,6 +208,8 @@ export function paginate(html: string, layout: PageLayout): string[] {
 function pageEnd(
   counts: readonly number[],
   flows: readonly number[],
+  overlaps: readonly number[],
+  startFlows: readonly number[],
   start: number,
   layout: PageLayout,
 ): number {
@@ -209,8 +223,12 @@ function pageEnd(
   let closed = 0
 
   for (let index = start; index < counts.length; index += 1) {
-    const height = counts[index] ?? 1
-    const flow = flows[index] ?? FLOW_NORMAL
+    // 余白が重なるのは同じ紙に並ぶブロックどうしだけです。紙の先頭に来た
+    // ブロックの上の余白は、前の紙の最後のブロックと重なりようがないので、
+    // 引いたぶんを戻します。戻さないと、その紙は重なりのぶんだけ余計に詰まり、
+    // 版面からはみ出しました（1段組で 0.6 行ほど）。
+    const height = (counts[index] ?? 1) + (index === start ? (overlaps[index] ?? 0) : 0)
+    const flow = (index === start ? startFlows[index] : flows[index]) ?? FLOW_NORMAL
 
     if (flow === FLOW_SPAN || flow === FLOW_SPAN_WITH_NEXT) {
       // 段抜きは区画を閉じ、その下に自分の高さぶんを取ります。段を抜く見出しが

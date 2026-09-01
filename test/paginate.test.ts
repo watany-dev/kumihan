@@ -420,6 +420,43 @@ describe('block heights match the stylesheet', () => {
     assert.ok(separate > paper, `${separate} <= ${paper}`)
     assert.equal(paginate(blocks.join('\n'), sized(paper)).length, 1)
   })
+
+  it('does not overlap a margin across a paper break', () => {
+    // 余白が重なるのは同じ紙に並ぶブロックどうしだけです。紙をまたぐ切れ目で
+    // 重なりを当てにすると、次の紙はそのぶん余計に詰まり、版面からはみ出します。
+    // 組み上がった紙は、その紙だけで組み直しても 1 枚のままのはずです。
+    const layout = sized(6)
+    const source = renderMarkdown(`${fullWidth(24 * 5)}\n\n## 節\n\n${paragraphs(4)}`)
+    const pages = paginate(source, layout)
+
+    assert.ok(pages.length >= 2, `${pages.length} 枚`)
+    for (const [index, page] of pages.entries()) {
+      assert.equal(paginate(page, layout).length, 1, `頁 ${index + 1}/${pages.length}`)
+    }
+  })
+
+  it('does not span a paragraph that only follows a heading on the paper before', () => {
+    // 2段組では h1 の直後の段落が段を抜きます（`h1 + p`）。紙は別々の article に
+    // 組むので、その並びは紙をまたいで効きません。またいだ先でも段を抜くものと
+    // 数えると、次の紙の詰まり方が本物とずれます。
+    // 図だけで 1 枚を埋める h1 を先に置いて、続きを 2 枚目の先頭に送ります。
+    const heading = '<h1><img src="fig.png" alt="図" width="4000" height="100000">見出し</h1>'
+    const cells = Array.from({ length: 10 }, () => `| ${fullWidth(6)} | ${fullWidth(6)} |`)
+    const rest = renderMarkdown(
+      [
+        fullWidth(200),
+        ...Array.from({ length: 4 }, () => fullWidth(24)),
+        fullWidth(600),
+        `| a | b |\n| --- | --- |\n${cells.join('\n')}`,
+        fullWidth(400),
+      ].join('\n\n'),
+    )
+
+    const pages = paginate(`${heading}\n${rest}`, MAGAZINE_LAYOUT)
+    assert.equal(pages[0], heading)
+    // 2 枚目は、その中身だけを頭から組んだ紙と同じ。
+    assert.equal(pages[1], paginate(rest, MAGAZINE_LAYOUT)[0])
+  })
 })
 
 // 頁を切っているのは CSS ではなく paginate なので、`break-after: avoid` も
