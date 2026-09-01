@@ -213,11 +213,10 @@ function pageEnd(
     const flow = flows[index] ?? FLOW_NORMAL
 
     if (flow === FLOW_SPAN || flow === FLOW_SPAN_WITH_NEXT) {
-      // 段抜きは区画を閉じ、その下に自分の高さぶんを取ります。
-      // 段を抜く見出しも `break-after: avoid` なので、続く 1 行ぶんの空きも要ります。
+      // 段抜きは区画を閉じ、その下に自分の高さぶんを取ります。段を抜く見出しが
+      // 紙の末尾に来たときは、withoutTrailingHeading が次の紙へ送ります。
       const level = closed + regionHeight(heights, kinds, columns)
-      const needed = keepsWithNext(flow) ? height + 1 : height
-      if (index > start && level + needed > columnLines) {
+      if (index > start && level + height > columnLines) {
         return index
       }
       closed = level + height
@@ -233,6 +232,21 @@ function pageEnd(
   }
 
   return counts.length
+}
+
+/**
+ * blocks の [from, to) を改行でつなぐ。
+ *
+ * `blocks.slice(from, to).join('\n')` なら 1 行ですが、紙ごとに配列を 1 つ捨てます。
+ * `content/index.md` の 40 倍（50 頁）で頁分けは 0.09ms から 0.16ms になり、
+ * 変換から組み上げまで（0.44ms）の 2 割近くを占めました。頁は文字列のまま積みます。
+ */
+function joinBlocks(blocks: readonly string[], from: number, to: number): string {
+  let page = blocks[from] ?? ''
+  for (let i = from + 1; i < to; i += 1) {
+    page += `\n${blocks[i]}`
+  }
+  return page
 }
 
 /**
@@ -254,20 +268,6 @@ function withoutTrailingHeading(flows: readonly number[], start: number, end: nu
     last -= 1
   }
   return last
-}
-
-/**
- * blocks の [from, to) を改行でつなぐ。
- *
- * 紙は文字列のまま組み立てます。いったん string[][] に貯めてから join すると、
- * 頁ごとの配列と、その中身をつないだ文字列を二重に持つことになります。
- */
-function joinBlocks(blocks: readonly string[], from: number, to: number): string {
-  let page = blocks[from] ?? ''
-  for (let i = from + 1; i < to; i += 1) {
-    page += `\n${blocks[i]}`
-  }
-  return page
 }
 
 /**

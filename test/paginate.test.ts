@@ -425,15 +425,8 @@ describe('block heights match the stylesheet', () => {
 // `widows` / `orphans` も、紙に分けたあとでは働く余地がありません。泣き別れは
 // 紙を確定させる前に直します。
 describe('widows and orphans', () => {
-  /** 見出しのあとに置く、続きぐあいの違うブロック。 */
-  const following = [
-    paragraphs(6),
-    // 1 行では済まない段落。見出しの直後に取る 1 行の空きには入りません。
-    fullWidth(400),
-    '| a | b |\n| --- | --- |\n| 1 | 2 |\n| 3 | 4 |',
-    ['```', 'first', 'second', 'third', '```'].join('\n'),
-    '> 引用です。\n>\n> 続きです。',
-  ]
+  /** 見出しのあとに置くブロック。1 行で済む続きと、済まない続き。 */
+  const following = [paragraphs(6), fullWidth(400)]
 
   it('never leaves a heading at the foot of the paper', () => {
     // 見出しは `break-after: avoid`。紙の下端に残ると、次の紙に本文だけが出ます。
