@@ -8,6 +8,7 @@ import { describe, it } from 'vite-plus/test'
 
 import { createPreviewApp } from '../src/app.js'
 import { memoryManuscript } from '../src/manuscript.js'
+import { typesetCss } from '../src/typesetting/typeset.css.js'
 import { webCss } from '../src/typesetting/web.css.js'
 
 function git(cwd: string, args: readonly string[]): string {
@@ -78,13 +79,21 @@ describe('preview /diff', () => {
       assert.match(html, /class="diff-added"/)
       assert.match(html, /新しい段落/)
       assert.match(html, /残す段落/)
-      assert.match(html, /aria-current="page">差分</)
-      assert.match(html, /href="diff.html"/)
-      assert.doesNotMatch(html, /aria-current="page">Web</)
+      assert.match(html, /class="paper"/)
+      assert.match(html, /assets\/typeset.css/)
+      assert.match(html, /aria-current="page">組版</)
+      assert.match(html, /aria-pressed="true">差分</)
+      assert.match(html, /href="magazine-diff.html"/)
+      assert.match(html, /href="web-diff.html"/)
+      assert.match(html, /href="\.\/"[^>]*>差分</)
+      assert.doesNotMatch(html, /aria-current="page">差分</)
       const web = await (await app.request('/web.html')).text()
-      assert.match(web, /href="diff.html"/)
+      assert.match(web, /href="web-diff.html"/)
       assert.match(web, /aria-current="page">Web</)
+      assert.match(web, /aria-pressed="false">差分</)
       assert.equal(web.includes('diff-added'), false)
+      const magazine = await (await app.request('/magazine.html')).text()
+      assert.match(magazine, /href="magazine-diff.html"/)
     } finally {
       await rm(dir, { recursive: true, force: true })
     }
@@ -126,6 +135,13 @@ describe('preview /diff', () => {
       assert.match(html, /差分を表示できません/)
       assert.equal(html.includes('href="diff.html"'), false)
       assert.match(html, /data-kumihan-version="/)
+      assert.match(html, /class="paper"/)
+      const magazineGuide = await (await app.request('/magazine-diff')).text()
+      assert.match(magazineGuide, /差分を表示できません/)
+      assert.match(magazineGuide, /cols-2/)
+      const webGuide = await (await app.request('/web-diff')).text()
+      assert.match(webGuide, /差分を表示できません/)
+      assert.match(webGuide, /<body class="web">/)
     } finally {
       await rm(dir, { recursive: true, force: true })
     }
@@ -156,6 +172,9 @@ describe('preview /diff', () => {
     const diff = await (await app.request('/diff')).text()
     assert.match(diff, /差分を表示できません/)
     assert.equal(diff.includes('パイプ原稿'), false)
+    assert.match(diff, /class="paper"/)
+    assert.match(await (await app.request('/magazine-diff')).text(), /cols-2/)
+    assert.match(await (await app.request('/web-diff')).text(), /<body class="web">/)
   })
 
   it('follows a save on /diff', async () => {
@@ -183,28 +202,63 @@ describe('preview /diff', () => {
     }
   })
 
-  it('reuses the same diff document while HEAD and the manuscript stay put', async () => {
-    const { dir, file } = await initRepo('kumihan-diff-cache-')
+  it('serves magazine and web diffs with the same marks', async () => {
+    const { dir, file } = await initRepo('kumihan-diff-layouts-')
     try {
       await writeFile(file, '# 初版\n\n新しい段落。\n\n残す段落。\n')
       const app = createPreviewApp({ source: file })
-      const first = await (await app.request('/diff')).text()
-      const second = await (await app.request('/diff')).text()
-      assert.equal(second, first)
+      const print = await (await app.request('/diff.html')).text()
+      const magazine = await (await app.request('/magazine-diff.html')).text()
+      const magazineAlias = await (await app.request('/magazine-diff')).text()
+      const web = await (await app.request('/web-diff.html')).text()
+      const webAlias = await (await app.request('/web-diff')).text()
+      assert.equal(magazine, magazineAlias)
+      assert.equal(web, webAlias)
+      assert.match(print, /<p class="diff-removed">/)
+      assert.match(print, /<p class="diff-added">/)
+      assert.equal(print.includes('<div class="diff-'), false)
+      assert.match(magazine, /cols-2/)
+      assert.match(magazine, /aria-current="page">2段</)
+      assert.match(magazine, /aria-pressed="true">差分</)
+      assert.match(magazine, /href="diff.html">組版</)
+      assert.match(magazine, /href="magazine.html"[^>]*>差分</)
+      assert.match(web, /<body class="web">/)
+      assert.match(web, /assets\/web.css/)
+      assert.match(web, /aria-current="page">Web</)
+      assert.match(web, /href="web.html"[^>]*>差分</)
+      assert.match(web, /<p class="diff-added">/)
     } finally {
       await rm(dir, { recursive: true, force: true })
     }
   })
 
-  it('shows an unmarked web article when the manuscript matches HEAD', async () => {
+  it('reuses the assembled magazine diff while HEAD and the manuscript stay put', async () => {
+    const { dir, file } = await initRepo('kumihan-diff-cache-mode-')
+    try {
+      await writeFile(file, '# 初版\n\n新しい段落。\n\n残す段落。\n')
+      const app = createPreviewApp({ source: file })
+      const first = await (await app.request('/magazine-diff')).text()
+      const second = await (await app.request('/magazine-diff')).text()
+      assert.equal(second, first)
+      const web = await (await app.request('/web-diff')).text()
+      assert.notEqual(web, first)
+      assert.match(web, /class="diff-added"/)
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('shows an unmarked typeset page when the manuscript matches HEAD', async () => {
     const { dir, file } = await initRepo('kumihan-diff-same-')
     try {
       const app = createPreviewApp({ source: file })
       const html = await (await app.request('/diff')).text()
       assert.equal(html.includes('diff-added'), false)
       assert.equal(html.includes('diff-removed'), false)
-      assert.match(html, /aria-current="page">差分</)
+      assert.match(html, /aria-pressed="true">差分</)
+      assert.match(html, /aria-current="page">組版</)
       assert.match(html, /古い段落/)
+      assert.match(html, /class="paper"/)
     } finally {
       await rm(dir, { recursive: true, force: true })
     }
@@ -221,6 +275,8 @@ describe('preview /diff', () => {
       const html = await res.text()
       assert.match(html, /差分を表示できません/)
       assert.match(html, /href="diff.html"/)
+      assert.match(html, /class="paper"/)
+      assert.match(html, /aria-pressed="true">差分</)
     } finally {
       await rm(dir, { recursive: true, force: true })
     }
@@ -257,9 +313,15 @@ describe('preview /diff', () => {
     assert.equal(html.includes('EISDIR'), false)
   })
 
-  it('styles added and removed blocks in the web stylesheet', () => {
+  it('styles added and removed blocks without changing typeset size', () => {
     assert.match(webCss, /\.article \.diff-added/)
     assert.match(webCss, /\.article \.diff-removed/)
     assert.match(webCss, /border-left:\s*4px solid/)
+    assert.match(webCss, /ul\.diff-added/)
+    assert.match(typesetCss, /\.typeset \.diff-added/)
+    assert.match(typesetCss, /left:\s*-2\.4mm/)
+    assert.match(typesetCss, /width:\s*1\.2mm/)
+    assert.doesNotMatch(typesetCss, /\.typeset \.diff-added[^{]*\{[^}]*padding/)
+    assert.doesNotMatch(typesetCss, /\.typeset \.diff-added[^{]*\{[^}]*border-left/)
   })
 })

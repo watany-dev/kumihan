@@ -127,17 +127,32 @@ describe('renderDocument', () => {
     assert.equal((off.match(/class="mode-switch-link/g) ?? []).length, 3)
 
     const on = renderDocument('<p>ok</p>', { mode: 'web', diffLink: true })
-    assert.match(on, /href="diff.html">差分</)
-    assert.doesNotMatch(on, /aria-current="page">差分</)
+    assert.match(on, /href="web-diff.html"[^>]*>差分</)
+    assert.match(on, /aria-pressed="false">差分</)
     assert.match(on, /aria-current="page">Web</)
+    assert.doesNotMatch(on, /aria-current="page">差分</)
+    assert.match(on, /href="web.html"/)
 
     const active = renderDocument('<p>ok</p>', { mode: 'web', diffLink: true, diffActive: true })
-    assert.match(active, /aria-current="page">差分</)
-    assert.doesNotMatch(active, /aria-current="page">Web</)
+    assert.match(active, /aria-pressed="true">差分</)
+    assert.match(active, /href="web.html"[^>]*>差分</)
+    assert.match(active, /aria-current="page">Web</)
+    assert.match(active, /href="web-diff.html"/)
+    assert.match(active, /href="diff.html">組版</)
+    assert.match(active, /href="magazine-diff.html">2段</)
+    assert.doesNotMatch(active, /aria-current="page">差分</)
+    assert.doesNotMatch(active, /is-active"[^>]*>差分</)
 
     const print = renderDocument('<p>ok</p>', { diffLink: true })
-    assert.match(print, /href="diff.html">差分</)
+    assert.match(print, /href="diff.html"[^>]*>差分</)
     assert.match(print, /aria-current="page">組版</)
+    assert.match(print, /aria-pressed="false">差分</)
+
+    const printDiff = renderDocument('<p>ok</p>', { diffLink: true, diffActive: true })
+    assert.match(printDiff, /href="\.\/"[^>]*>差分</)
+    assert.match(printDiff, /href="diff.html"/)
+    assert.match(printDiff, /aria-current="page">組版</)
+    assert.match(printDiff, /aria-pressed="true">差分</)
   })
 })
 
@@ -186,6 +201,18 @@ describe('ノンブルと柱', () => {
   it('柱から見出しの中のタグを外す', () => {
     const html = renderDocument(renderMarkdown(`# **強調**の見出し\n\n${long}`))
     assert.match(html, /data-head="強調の見出し"/)
+  })
+
+  it('柱は削除された旧題を飛ばす', () => {
+    const html = renderDocument(
+      `<h1 class="diff-removed">旧題</h1>\n<h1 class="diff-added">新題</h1>\n${renderMarkdown(long)}`,
+    )
+    const papers = html.split('<div class="paper"').slice(1)
+    assert.ok(papers.length >= 2)
+    assert.doesNotMatch(html, /data-head="旧題"/)
+    for (const paper of papers.slice(1)) {
+      assert.match(paper, /data-head="新題"/)
+    }
   })
 
   it('Web 記事ビューには出さない', () => {

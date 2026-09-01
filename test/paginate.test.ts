@@ -2,7 +2,8 @@ import assert from 'node:assert/strict'
 
 import { describe, it } from 'vite-plus/test'
 
-import { renderMarkdown } from '../src/markdown/render.js'
+import { renderBlockDiff } from '../src/diff/block-diff.js'
+import { renderMarkdown, renderMarkdownPiece } from '../src/markdown/render.js'
 import {
   MAGAZINE_COLUMN_LINES,
   MAGAZINE_LAYOUT,
@@ -499,6 +500,19 @@ describe('widows and orphans', () => {
     assert.equal(declaration('.typeset p', 'widows'), '2')
     assert.equal(declaration('.typeset p', 'orphans'), '2')
   })
+
+  it('paginates consecutive diff-marked paragraphs across papers', () => {
+    // wrapper だと長い変更が 1 ブロックになり、紙 1 枚にあふれる。
+    const added = Array.from({ length: 80 }, () => '変更した段落です。').join('\n\n')
+    const fragment = renderBlockDiff('', added, renderMarkdownPiece)
+    assert.equal(fragment.includes('<div class="diff-'), false)
+    assert.match(fragment, /<p class="diff-added">/)
+    const pages = paginate(fragment, PRINT_LAYOUT)
+    assert.ok(pages.length > 1)
+    for (const page of pages) {
+      assert.match(page, /<p class="diff-added">/)
+    }
+  })
 })
 
 /** CSS ピクセルを mm に。1px = 1/96 インチ。 */
@@ -572,6 +586,9 @@ describe('image heights', () => {
       margin(MAGAZINE_LAYOUT) + rows(MAGAZINE_LAYOUT.columnWidthMm / 2, MAGAZINE_LAYOUT),
     )
     assert.ok(spanning > inColumn)
+
+    const marked = '<p class="diff-added"><img src="a.png" alt="" width="1000" height="500"></p>'
+    near(blockLines(marked, MAGAZINE_LAYOUT), spanning)
   })
 
   it('counts a figure of unknown size as one line, as before', () => {
@@ -650,6 +667,16 @@ describe('page layout matches the stylesheet', () => {
     // width を戻し忘れると、max-height で切り詰めた図がゆがみます。
     assert.equal(declaration('.typeset img', 'width'), 'auto')
     assert.equal(declaration('.typeset img', 'height'), 'auto')
+  })
+
+  it('keeps diff marks from changing typeset metrics', () => {
+    assert.equal(declaration('.typeset .diff-added', 'position'), 'relative')
+    assert.equal(declaration('.typeset .diff-added', 'padding'), '')
+    assert.equal(declaration('.typeset .diff-added', 'border-left'), '')
+    assert.equal(declaration('.typeset .diff-added', 'margin'), '')
+    assert.equal(declaration('.typeset .diff-added::after', 'position'), 'absolute')
+    assert.equal(declaration('.typeset .diff-added::after', 'left'), '-2.4mm')
+    assert.equal(declaration('.typeset .diff-added::after', 'width'), '1.2mm')
   })
 
   it('fits the type on the paper', () => {

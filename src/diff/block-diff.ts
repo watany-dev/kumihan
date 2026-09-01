@@ -1,4 +1,5 @@
 import { splitSegments } from '../markdown/segments.js'
+import { splitBlocks } from '../typesetting/paginate.js'
 
 type DiffKind = 'keep' | 'add' | 'del'
 
@@ -77,8 +78,11 @@ function trimSegment(segment: string): string {
 }
 
 /**
- * keep はそのまま、連続する del / add は同じ kind の wrapper 1 つにまとめる。
- * 隣接する del ランと add ランは del → add の順（削除が元の位置に残る）。
+ * keep はそのまま、add / del は各ブロックの開きタグに class を付ける。
+ * 隣接する del と add は del → add の順（削除が元の位置に残る）。
+ *
+ * wrapper にしないのは、頁分けがブロックの境目でしか切れないため。包むと
+ * 長い変更が割れない 1 ブロックになり、タグ名での高さ見積りも崩れる。
  */
 export function renderBlockDiff(
   oldNormalized: string,
@@ -96,30 +100,30 @@ export function renderBlockDiff(
 
 function htmlFromOps(ops: readonly DiffOp[], renderPiece: (segment: string) => string): string {
   let html = ''
-  let i = 0
-  while (i < ops.length) {
-    const op = ops[i]
-    if (op === undefined) break
+  for (const op of ops) {
+    const piece = renderPiece(op.text)
+    if (piece.length === 0) continue
     if (op.kind === 'keep') {
-      html = appendHtml(html, renderPiece(op.text))
-      i += 1
+      html = appendHtml(html, piece)
       continue
     }
-
-    const kind = op.kind
-    const inner: string[] = []
-    while (i < ops.length) {
-      const next = ops[i]
-      if (next === undefined || next.kind !== kind) break
-      const piece = renderPiece(next.text)
-      if (piece.length > 0) inner.push(piece)
-      i += 1
-    }
-    if (inner.length === 0) continue
-    const cls = kind === 'add' ? 'diff-added' : 'diff-removed'
-    html = appendHtml(html, `<div class="${cls}">${inner.join('\n')}</div>`)
+    const cls = op.kind === 'add' ? 'diff-added' : 'diff-removed'
+    html = appendHtml(html, markDiffClass(piece, cls))
   }
   return html
+}
+
+function markDiffClass(html: string, cls: string): string {
+  return splitBlocks(html)
+    .map((block) => addClass(block, cls))
+    .join('\n')
+}
+
+function addClass(block: string, cls: string): string {
+  if (block.charCodeAt(0) !== 0x3c) return block
+  const gt = block.indexOf('>')
+  if (gt <= 0) return block
+  return `${block.slice(0, gt)} class="${cls}"${block.slice(gt)}`
 }
 
 function appendHtml(html: string, piece: string): string {

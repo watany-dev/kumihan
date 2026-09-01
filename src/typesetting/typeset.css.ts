@@ -295,6 +295,42 @@ body {
   column-span: all;
 }
 
+/*
+ * 差分の印は高さを変えない。頁分けは class を見ないので、padding や
+ * border-left を足すと字詰がずれて紙があふれる。背景と、版面の左余白・
+ * 段間へ出した縦罫（::after）だけにする。
+ */
+.typeset .diff-added,
+.typeset .diff-removed {
+  position: relative;
+}
+
+.typeset .diff-added {
+  background: #f1f8f2;
+}
+
+.typeset .diff-removed {
+  background: #fdf2f3;
+}
+
+.typeset .diff-added::after,
+.typeset .diff-removed::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -2.4mm;
+  width: 1.2mm;
+}
+
+.typeset .diff-added::after {
+  background: #2e7d32;
+}
+
+.typeset .diff-removed::after {
+  background: #e60012;
+}
+
 .mode-switch {
   position: fixed;
   top: 12px;
@@ -329,8 +365,16 @@ body {
   background: #1a1a1a;
 }
 
+.mode-switch-link[aria-pressed="true"] {
+  background: #eef6ee;
+}
+
 .mode-switch-link:not(.is-active):hover {
   background: #f4f1ea;
+}
+
+.mode-switch-link[aria-pressed="true"]:hover {
+  background: #e4f0e4;
 }
 
 .mode-switch-link:focus-visible {

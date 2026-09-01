@@ -19,7 +19,10 @@ export interface RenderDocumentOptions {
    * export と既定では出さないので、既存の document / export テストは動かない。
    */
   diffLink?: boolean
-  /** 「差分」を現在のページとして印を付ける。`/diff` だけ true。 */
+  /**
+   * 差分ページ。モードリンクは各モードの差分へ行き、「差分」はトグル
+   *（`aria-pressed`）で今のモードの通常表示へ戻る。
+   */
   diffActive?: boolean
 }
 
@@ -99,10 +102,15 @@ ${renderPapers(paginate(html, PRINT_LAYOUT), 'typeset', head)}
  * 参照になっています。つまり `<...>` は本物のタグだけで、そのまま外せます。
  * 外したあとの文字列もエスケープ済みのままなので（`"` は `&quot;`）、
  * data-head の値にそのまま置けます。
+ *
+ * 差分ビューでは削除された旧題（`diff-removed`）を飛ばし、残った見出しを使います。
  */
 function runningHead(html: string): string {
-  const inner = /<h1[^>]*>([\s\S]*?)<\/h1>/.exec(html)?.[1]
-  return inner === undefined ? '' : inner.replace(/<[^>]*>/g, '').trim()
+  for (const match of html.matchAll(/<h1([^>]*)>([\s\S]*?)<\/h1>/g)) {
+    if (/\bdiff-removed\b/.test(match[1] ?? '')) continue
+    return (match[2] ?? '').replace(/<[^>]*>/g, '').trim()
+  }
+  return ''
 }
 
 /**
@@ -122,17 +130,23 @@ ${page}
     .join('\n')
 }
 
+function modeHref(mode: PreviewMode, diff: boolean): string {
+  if (mode === 'magazine') return diff ? 'magazine-diff.html' : 'magazine.html'
+  if (mode === 'web') return diff ? 'web-diff.html' : 'web.html'
+  return diff ? 'diff.html' : './'
+}
+
 function modeSwitcher(mode: PreviewMode, diffLink: boolean, diffActive: boolean): string {
-  const printActive = !diffActive && mode === 'print'
-  const magazineActive = !diffActive && mode === 'magazine'
-  const webActive = !diffActive && mode === 'web'
+  const printActive = mode === 'print'
+  const magazineActive = mode === 'magazine'
+  const webActive = mode === 'web'
   const diff = diffLink
-    ? `\n    <a class="mode-switch-link${diffActive ? ' is-active' : ''}" href="diff.html"${diffActive ? ' aria-current="page"' : ''}>差分</a>`
+    ? `\n    <a class="mode-switch-link" href="${modeHref(mode, !diffActive)}" aria-pressed="${diffActive ? 'true' : 'false'}">差分</a>`
     : ''
 
   return `<nav class="mode-switch" aria-label="表示モード">
-    <a class="mode-switch-link${printActive ? ' is-active' : ''}" href="./"${printActive ? ' aria-current="page"' : ''}>組版</a>
-    <a class="mode-switch-link${magazineActive ? ' is-active' : ''}" href="magazine.html"${magazineActive ? ' aria-current="page"' : ''}>2段</a>
-    <a class="mode-switch-link${webActive ? ' is-active' : ''}" href="web.html"${webActive ? ' aria-current="page"' : ''}>Web</a>${diff}
+    <a class="mode-switch-link${printActive ? ' is-active' : ''}" href="${modeHref('print', diffActive)}"${printActive ? ' aria-current="page"' : ''}>組版</a>
+    <a class="mode-switch-link${magazineActive ? ' is-active' : ''}" href="${modeHref('magazine', diffActive)}"${magazineActive ? ' aria-current="page"' : ''}>2段</a>
+    <a class="mode-switch-link${webActive ? ' is-active' : ''}" href="${modeHref('web', diffActive)}"${webActive ? ' aria-current="page"' : ''}>Web</a>${diff}
   </nav>`
 }
