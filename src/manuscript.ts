@@ -8,6 +8,11 @@ import { basename, dirname, resolve } from 'node:path'
 export interface Manuscript {
   /** 画像の相対パスを解決する基準ディレクトリ（絶対パス）。 */
   root: string
+  /**
+   * 原稿ファイルの絶対パス。ファイルから読むときだけ入ります。
+   * 標準入力には元ファイルが無いので持ちません。
+   */
+  file?: string
   /** 原稿本文。ファイルの場合は呼ぶたび読み直します（プレビューの更新のため）。 */
   read(): Promise<string>
   /**
@@ -38,6 +43,7 @@ export function toManuscript(source: ManuscriptSource): Manuscript {
   const file = resolve(source)
   return {
     root: dirname(file),
+    file,
     read: () => readFile(file, 'utf8'),
     watch: (onChange) => watchManuscriptFile(file, onChange),
   }

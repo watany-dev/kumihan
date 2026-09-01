@@ -2,9 +2,11 @@ import { readFile } from 'node:fs/promises'
 
 import { Hono, type Context } from 'hono'
 
+import { renderBlockDiff } from './diff/block-diff.js'
+import { probeGit, readHeadFile, type GitTrackedFile } from './git-source.js'
 import { imageContentType, resolveManuscriptFile } from './manuscript-path.js'
 import { toManuscript, type ManuscriptSource } from './manuscript.js'
-import { renderMarkdown } from './markdown/render.js'
+import { normalizeMarkdown, renderMarkdown, renderMarkdownPiece } from './markdown/render.js'
 import { reloadJs } from './reload.js.js'
 import { documentSecurityMeta, previewSecureHeaders } from './security/headers.js'
 import { withImageSizes } from './typesetting/measure-images.js'
@@ -65,6 +67,8 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
   app.get('/magazine', (c) => serveManuscript(c, 'magazine'))
   app.get('/web.html', (c) => serveManuscript(c, 'web'))
   app.get('/web', (c) => serveManuscript(c, 'web'))
+  app.get('/diff.html', (c) => serveDiff(c))
+  app.get('/diff', (c) => serveDiff(c))
 
   // 原稿が変わらないかぎり、組んだ結果を使い回します。
   //
@@ -79,6 +83,15 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
   let cachedFragment = ''
   let cachedVersion = ''
   const cachedDocuments = new Map<PreviewMode, string>()
+
+  // git の探りは createPreviewApp を同期のままにするため、初回の HTML 応答
+  // で await して結果を覚える。プロセス中に有効/無効は変わらない。
+  let gitProbe: Promise<GitTrackedFile | null> | undefined
+
+  function gitSource(): Promise<GitTrackedFile | null> {
+    gitProbe ??= manuscript.file === undefined ? Promise.resolve(null) : probeGit(manuscript.file)
+    return gitProbe
+  }
 
   async function prime(markdown: string): Promise<void> {
     if (markdown === cachedMarkdown) return
@@ -96,7 +109,7 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
   }
 
   async function documentFor(markdown: string, mode: PreviewMode): Promise<string> {
-    await prime(markdown)
+    const [, git] = await Promise.all([prime(markdown), gitSource()])
 
     const cached = cachedDocuments.get(mode)
     if (cached !== undefined) {
@@ -108,9 +121,73 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
       language,
       mode,
       liveReload: cachedVersion,
+      diffLink: git !== null,
     })
     cachedDocuments.set(mode, html)
     return html
+  }
+
+  const DIFF_UNAVAILABLE =
+    '<p>この原稿では差分を表示できません。git リポジトリで追跡されているファイルを指定してください。</p>'
+
+  let cachedDiffKey = ''
+  let cachedDiffHtml = ''
+
+  async function diffPage(markdown: string, git: GitTrackedFile): Promise<string | null> {
+    const [version, head] = await Promise.all([versionOf(markdown), readHeadFile(git)])
+    if (head === null) return null
+
+    const key = `${head.oid}:${version}`
+    if (key === cachedDiffKey) return cachedDiffHtml
+
+    const fragment = renderBlockDiff(
+      normalizeMarkdown(head.text),
+      normalizeMarkdown(markdown),
+      renderMarkdownPiece,
+    )
+    const sized = await withImageSizes(fragment, manuscript.root)
+    const html = renderDocument(sized, {
+      title,
+      language,
+      mode: 'web',
+      liveReload: version,
+      diffLink: true,
+      diffActive: true,
+    })
+    cachedDiffKey = key
+    cachedDiffHtml = html
+    return html
+  }
+
+  async function unavailableDiffPage(markdown: string, diffLink: boolean): Promise<string> {
+    return renderDocument(DIFF_UNAVAILABLE, {
+      title,
+      language,
+      mode: 'web',
+      liveReload: await versionOf(markdown),
+      diffLink,
+    })
+  }
+
+  function manuscriptReadError(c: Context, error: unknown) {
+    if (isNotFound(error)) {
+      return c.body(
+        errorPage(404, '原稿が見つかりません', '指定された Markdown ファイルが存在しません。'),
+        404,
+        HTML_HEADERS,
+      )
+    }
+
+    console.error('[kumihan] Failed to read markdown source:', error)
+    return c.body(
+      errorPage(
+        500,
+        '読み込みに失敗しました',
+        'Markdown ファイルの読み込み中にエラーが発生しました。',
+      ),
+      500,
+      HTML_HEADERS,
+    )
   }
 
   async function serveManuscript(c: Context, mode: PreviewMode) {
@@ -119,25 +196,28 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
       const html = await documentFor(markdown, mode)
       return c.body(html, 200, HTML_HEADERS)
     } catch (error) {
-      if (isNotFound(error)) {
-        return c.body(
-          errorPage(404, '原稿が見つかりません', '指定された Markdown ファイルが存在しません。'),
-          404,
-          HTML_HEADERS,
-        )
-      }
-
-      console.error('[kumihan] Failed to read markdown source:', error)
-      return c.body(
-        errorPage(
-          500,
-          '読み込みに失敗しました',
-          'Markdown ファイルの読み込み中にエラーが発生しました。',
-        ),
-        500,
-        HTML_HEADERS,
-      )
+      return manuscriptReadError(c, error)
     }
+  }
+
+  async function serveDiff(c: Context) {
+    let markdown: string
+    try {
+      markdown = await manuscript.read()
+    } catch (error) {
+      return manuscriptReadError(c, error)
+    }
+
+    const git = await gitSource()
+    if (git === null) {
+      return c.body(await unavailableDiffPage(markdown, false), 200, HTML_HEADERS)
+    }
+
+    const html = await diffPage(markdown, git)
+    if (html === null) {
+      return c.body(await unavailableDiffPage(markdown, true), 200, HTML_HEADERS)
+    }
+    return c.body(html, 200, HTML_HEADERS)
   }
 
   // 保存されたことをプレビューへ知らせる口（SSE）。

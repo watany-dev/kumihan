@@ -40,12 +40,16 @@ GitHub Codespaces と Dev Container は Bun と Vite+ を入れ、`vp install --
 | `GET /magazine`              | `/magazine.html` と同じ                                      |
 | `GET /web.html`              | 同じ原稿を Web 記事スタイルで返す                            |
 | `GET /web`                   | `/web.html` と同じ                                           |
+| `GET /diff.html`             | 作業中の原稿と `HEAD` の区画差分（Web レイアウト）           |
+| `GET /diff`                  | `/diff.html` と同じ                                          |
 | `GET /health`                | `{ "ok": true }`                                             |
 | `GET /events`                | 原稿が保存されたことを知らせる SSE（`text/event-stream`）    |
 | `GET /assets/typeset.css`    | 組版 CSS（1段 / 2段）                                        |
 | `GET /assets/web.css`        | Web 記事 CSS                                                 |
 | `GET /assets/reload.js`      | 自動リロードのスクリプト（プレビューの HTML だけが読み込む） |
 | `GET` 原稿ディレクトリの画像 | 相対パスの png / jpg / gif / webp / svg / avif               |
+
+`GET /diff` は git で追跡されている原稿ファイルのときだけ差分を返します。git が無い、リポジトリ外、未追跡、標準入力では案内ページ（200）になり、切替にも「差分」は出ません。`export` の 5 ファイルには含めません。比較はフェンス外の空行で区切った区画単位で、追加は `diff-added`、削除は `diff-removed` です。
 
 `GET /` は毎回ファイルを読み直し、`Cache-Control: no-store` で返します。読み直した中身が前と同じときは組み直さず、変換結果を使い回します。
 
@@ -81,7 +85,7 @@ const app = createPreviewApp({
 
 変換済みの断片を他の用途にも使うときは、`exportFiles(fragment)` に断片を渡すと Markdown の変換をやり直さずに書き出す一式（`pathname`・`body`・`contentType`）が得られます。`writeExport` はこの形で、変換 1 回の結果を HTML の組み立てと画像の収集の両方に使っています。
 
-原稿の取り出し方は `src/manuscript.ts` の `Manuscript`（`root`・`read()`・任意の `watch()`）にまとめてあります。`watch` はファイル原稿だけが持ち、プレビューの `/events` が購読中にだけ使います。`createPreviewApp` と `writeExport` はパスの文字列も `Manuscript` も受け取ります。標準入力のように元ファイルが無い原稿は `memoryManuscript` で包み、画像の基準ディレクトリを明示します。
+原稿の取り出し方は `src/manuscript.ts` の `Manuscript`（`root`・`read()`・任意の `watch()`）にまとめてあります。ファイルから読む原稿は `file` に絶対パスを持ち、プレビューの差分ビューが git を探るために使います。`watch` はファイル原稿だけが持ち、プレビューの `/events` が購読中にだけ使います。`createPreviewApp` と `writeExport` はパスの文字列も `Manuscript` も受け取ります。標準入力のように元ファイルが無い原稿は `memoryManuscript` で包み、画像の基準ディレクトリを明示します。
 
 ```ts
 import { memoryManuscript } from './src/manuscript.ts'

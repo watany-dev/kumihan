@@ -120,6 +120,25 @@ describe('renderDocument', () => {
     assert.equal(html.includes('<script>'), false)
     assert.match(html, /lang="ja&quot;&gt;&lt;script&gt;"/)
   })
+
+  it('adds a diff switcher link only when asked', () => {
+    const off = renderDocument('<p>ok</p>', { mode: 'web' })
+    assert.equal(off.includes('diff.html'), false)
+    assert.equal((off.match(/class="mode-switch-link/g) ?? []).length, 3)
+
+    const on = renderDocument('<p>ok</p>', { mode: 'web', diffLink: true })
+    assert.match(on, /href="diff.html">差分</)
+    assert.doesNotMatch(on, /aria-current="page">差分</)
+    assert.match(on, /aria-current="page">Web</)
+
+    const active = renderDocument('<p>ok</p>', { mode: 'web', diffLink: true, diffActive: true })
+    assert.match(active, /aria-current="page">差分</)
+    assert.doesNotMatch(active, /aria-current="page">Web</)
+
+    const print = renderDocument('<p>ok</p>', { diffLink: true })
+    assert.match(print, /href="diff.html">差分</)
+    assert.match(print, /aria-current="page">組版</)
+  })
 })
 
 describe('ノンブルと柱', () => {
