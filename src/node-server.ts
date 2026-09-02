@@ -116,6 +116,27 @@ export interface NodeResponseLike {
   end(chunk?: Buffer | string): unknown
 }
 
+// hop-by-hop は転送してはいけないヘッダです（RFC 9110）。Hono の streamSSE は
+// Transfer-Encoding / Connection を付けるので、そのまま writeHead に渡すと
+// Node のチャンク化と食い違います。本文はこちらで流すので、決めは Node に任せる。
+const HOP_BY_HOP = new Set([
+  'connection',
+  'keep-alive',
+  'transfer-encoding',
+  'te',
+  'trailer',
+  'upgrade',
+])
+
+function nodeResponseHeaders(headers: Headers): OutgoingHttpHeaders {
+  const out: OutgoingHttpHeaders = {}
+  for (const [name, value] of headers) {
+    if (HOP_BY_HOP.has(name.toLowerCase())) continue
+    out[name] = value
+  }
+  return out
+}
+
 export async function dispatchNodeRequest(
   req: NodeRequestLike,
   res: NodeResponseLike,
@@ -145,7 +166,7 @@ export async function dispatchNodeRequest(
     }
     const target = safeRequestTarget(req.url)
     const response = await fetchImpl(new Request(`http://${host}${target}`, { method }))
-    res.writeHead(response.status, Object.fromEntries(response.headers))
+    res.writeHead(response.status, nodeResponseHeaders(response.headers))
     const body = response.body
     if (body === null) {
       res.end()
