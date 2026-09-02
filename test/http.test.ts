@@ -303,9 +303,9 @@ describe('node http adapter', () => {
         ),
     )
     assert.equal(res.statusCode, 200)
-    assert.equal(res.headers['X-Test'], '1')
-    assert.equal(res.headers['Transfer-Encoding'], undefined)
-    assert.equal(res.headers['Connection'], undefined)
+    assert.equal(res.headers['x-test'], '1')
+    assert.equal(res.headers['transfer-encoding'], undefined)
+    assert.equal(res.headers['connection'], undefined)
   })
 
   it('does not rewrite headers when the response has already started', async () => {

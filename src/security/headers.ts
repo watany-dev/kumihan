@@ -23,20 +23,21 @@ const EXPORT_CSP = {
   mediaSrc: ["'none'"],
   workerSrc: ["'none'"],
   manifestSrc: ["'none'"],
-} as const
+}
 
 const PREVIEW_CSP = {
   ...EXPORT_CSP,
   scriptSrc: ["'self'"],
   connectSrc: ["'self'"],
-} as const
-
-type CspDirectives = { readonly [name: string]: readonly string[] }
+}
 
 const REFERRER_POLICY = 'no-referrer'
 
 // frame-ancestors は <meta> では無視されるので、HTTP ヘッダにだけ残す。
-function cspHeader(policy: CspDirectives, omit: ReadonlySet<string> = new Set()): string {
+function cspHeader(
+  policy: Record<string, readonly string[]>,
+  omit: ReadonlySet<string> = new Set(),
+): string {
   const parts: string[] = []
   for (const [name, values] of Object.entries(policy)) {
     if (omit.has(name)) continue
