@@ -4,46 +4,57 @@ import { secureHeaders } from 'hono/secure-headers'
 // EventSource を使うので `script-src 'self'` / `connect-src 'self'`、
 // export した静的 HTML はスクリプトを含まないので `'none'` のままです。
 // インライン・属性のスクリプトはどちらも通しません。
-const EXPORT_CSP = [
-  "default-src 'none'",
-  "base-uri 'none'",
-  "form-action 'none'",
-  "frame-ancestors 'none'",
-  "script-src 'none'",
-  "script-src-attr 'none'",
-  "style-src 'self'",
-  "img-src 'self' https: http:",
-  "font-src 'none'",
-  "connect-src 'none'",
-  "object-src 'none'",
-  "media-src 'none'",
-  "worker-src 'none'",
-  "manifest-src 'none'",
-].join('; ')
+//
+// ディレクティブの表は 1 つ。HTTP ヘッダは hono/secure-headers が受け取る
+// 形のまま渡し、`<meta>` 用の文字列もここから組む。片方だけ直して
+// ヘッダと meta が食い違う、ということを防ぐためです。
+const EXPORT_CSP = {
+  defaultSrc: ["'none'"],
+  baseUri: ["'none'"],
+  formAction: ["'none'"],
+  frameAncestors: ["'none'"],
+  scriptSrc: ["'none'"],
+  scriptSrcAttr: ["'none'"],
+  styleSrc: ["'self'"],
+  imgSrc: ["'self'", 'https:', 'http:'],
+  fontSrc: ["'none'"],
+  connectSrc: ["'none'"],
+  objectSrc: ["'none'"],
+  mediaSrc: ["'none'"],
+  workerSrc: ["'none'"],
+  manifestSrc: ["'none'"],
+}
 
-const PREVIEW_CSP = EXPORT_CSP.replace("script-src 'none'", "script-src 'self'").replace(
-  "connect-src 'none'",
-  "connect-src 'self'",
-)
+const PREVIEW_CSP = {
+  ...EXPORT_CSP,
+  scriptSrc: ["'self'"],
+  connectSrc: ["'self'"],
+}
 
 const REFERRER_POLICY = 'no-referrer'
 
-// frame-ancestors is ignored in <meta>; keep it on the HTTP header only.
-function metaCsp(policy: string): string {
-  return policy
-    .split('; ')
-    .filter((directive) => !directive.startsWith('frame-ancestors'))
-    .join('; ')
+// frame-ancestors は <meta> では無視されるので、HTTP ヘッダにだけ残す。
+function cspHeader(
+  policy: Record<string, readonly string[]>,
+  omit: ReadonlySet<string> = new Set(),
+): string {
+  const parts: string[] = []
+  for (const [name, values] of Object.entries(policy)) {
+    if (omit.has(name)) continue
+    const directive = name.replace(/[A-Z]/g, (ch) => `-${ch.toLowerCase()}`)
+    parts.push(`${directive} ${values.join(' ')}`)
+  }
+  return parts.join('; ')
 }
-
-// 内容は定数なので、リクエストごとに組み立て直さない。
-const EXPORT_SECURITY_META = securityMeta(metaCsp(EXPORT_CSP))
-const PREVIEW_SECURITY_META = securityMeta(metaCsp(PREVIEW_CSP))
 
 function securityMeta(policy: string): string {
   return `  <meta http-equiv="Content-Security-Policy" content="${policy}">
   <meta name="referrer" content="${REFERRER_POLICY}">`
 }
+
+const META_OMIT = new Set(['frameAncestors'])
+const EXPORT_SECURITY_META = securityMeta(cspHeader(EXPORT_CSP, META_OMIT))
+const PREVIEW_SECURITY_META = securityMeta(cspHeader(PREVIEW_CSP, META_OMIT))
 
 export function documentSecurityMeta(context: 'export' | 'preview' = 'export'): string {
   return context === 'preview' ? PREVIEW_SECURITY_META : EXPORT_SECURITY_META
@@ -51,22 +62,7 @@ export function documentSecurityMeta(context: 'export' | 'preview' = 'export'): 
 
 export function previewSecureHeaders() {
   return secureHeaders({
-    contentSecurityPolicy: {
-      defaultSrc: ["'none'"],
-      baseUri: ["'none'"],
-      formAction: ["'none'"],
-      frameAncestors: ["'none'"],
-      scriptSrc: ["'self'"],
-      scriptSrcAttr: ["'none'"],
-      styleSrc: ["'self'"],
-      imgSrc: ["'self'", 'https:', 'http:'],
-      fontSrc: ["'none'"],
-      connectSrc: ["'self'"],
-      objectSrc: ["'none'"],
-      mediaSrc: ["'none'"],
-      workerSrc: ["'none'"],
-      manifestSrc: ["'none'"],
-    },
+    contentSecurityPolicy: PREVIEW_CSP,
     xFrameOptions: 'DENY',
     referrerPolicy: REFERRER_POLICY,
     permissionsPolicy: {

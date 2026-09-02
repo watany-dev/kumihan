@@ -286,6 +286,28 @@ describe('node http adapter', () => {
     }
   })
 
+  it('does not copy hop-by-hop headers onto the Node response', async () => {
+    const res = new RecordingResponse()
+    await dispatchNodeRequest(
+      { headers: { host: '127.0.0.1' }, method: 'GET', url: '/' },
+      res,
+      () =>
+        Promise.resolve(
+          new Response('ok', {
+            headers: {
+              'Transfer-Encoding': 'chunked',
+              Connection: 'keep-alive',
+              'X-Test': '1',
+            },
+          }),
+        ),
+    )
+    assert.equal(res.statusCode, 200)
+    assert.equal(res.headers['x-test'], '1')
+    assert.equal(res.headers['transfer-encoding'], undefined)
+    assert.equal(res.headers['connection'], undefined)
+  })
+
   it('does not rewrite headers when the response has already started', async () => {
     await withServer(
       (req, res) => {

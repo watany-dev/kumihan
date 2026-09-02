@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 
 import { Hono, type Context } from 'hono'
+import { streamSSE } from 'hono/streaming'
 
 import { renderBlockDiff } from './diff/block-diff.js'
 import { probeGit, readHeadFile, type GitTrackedFile } from './git-source.js'
@@ -20,25 +21,9 @@ export interface PreviewConfig {
   language?: string
 }
 
-const HTML_HEADERS = {
-  'Content-Type': 'text/html; charset=utf-8',
-  'Cache-Control': 'no-store',
-} as const
-
-const CSS_HEADERS = {
-  'Content-Type': 'text/css; charset=utf-8',
-  'Cache-Control': 'no-store',
-} as const
-
-const JS_HEADERS = {
-  'Content-Type': 'text/javascript; charset=utf-8',
-  'Cache-Control': 'no-store',
-} as const
-
-const SSE_HEADERS = {
-  'Content-Type': 'text/event-stream',
-  'Cache-Control': 'no-store',
-} as const
+const HTML_HEADERS = { 'Content-Type': 'text/html; charset=utf-8' } as const
+const CSS_HEADERS = { 'Content-Type': 'text/css; charset=utf-8' } as const
+const JS_HEADERS = { 'Content-Type': 'text/javascript; charset=utf-8' } as const
 
 // 保存イベントは 1 回の保存で連続して届くことがあるので、この幅で 1 回に
 // まとめてから読み直します。保存から通知までの遅れに直接乗る値です。
@@ -55,6 +40,11 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
   const manuscript = toManuscript(config.source)
   const app = new Hono()
   app.use('*', previewSecureHeaders())
+  // プレビューは編集中の原稿を返すので、どの経路も貯めさせない。
+  app.use('*', async (c, next) => {
+    await next()
+    c.header('Cache-Control', 'no-store')
+  })
 
   app.get('/health', (c) => c.json({ ok: true }))
 
@@ -62,17 +52,13 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
   app.get('/assets/web.css', (c) => c.body(webCss, 200, CSS_HEADERS))
   app.get('/assets/reload.js', (c) => c.body(reloadJs, 200, JS_HEADERS))
 
+  // .html の有無は同じページ。Hono の複数パス登録でハンドラを 1 本にする。
   app.get('/', (c) => serveManuscript(c, 'print'))
-  app.get('/magazine.html', (c) => serveManuscript(c, 'magazine'))
-  app.get('/magazine', (c) => serveManuscript(c, 'magazine'))
-  app.get('/web.html', (c) => serveManuscript(c, 'web'))
-  app.get('/web', (c) => serveManuscript(c, 'web'))
-  app.get('/diff.html', (c) => serveDiff(c, 'print'))
-  app.get('/diff', (c) => serveDiff(c, 'print'))
-  app.get('/magazine-diff.html', (c) => serveDiff(c, 'magazine'))
-  app.get('/magazine-diff', (c) => serveDiff(c, 'magazine'))
-  app.get('/web-diff.html', (c) => serveDiff(c, 'web'))
-  app.get('/web-diff', (c) => serveDiff(c, 'web'))
+  app.on('GET', ['/magazine', '/magazine.html'], (c) => serveManuscript(c, 'magazine'))
+  app.on('GET', ['/web', '/web.html'], (c) => serveManuscript(c, 'web'))
+  app.on('GET', ['/diff', '/diff.html'], (c) => serveDiff(c, 'print'))
+  app.on('GET', ['/magazine-diff', '/magazine-diff.html'], (c) => serveDiff(c, 'magazine'))
+  app.on('GET', ['/web-diff', '/web-diff.html'], (c) => serveDiff(c, 'web'))
 
   // 原稿が変わらないかぎり、組んだ結果を使い回します。
   //
@@ -323,35 +309,41 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
     notifiedVersion = version
     const clientVersion = c.req.query('v')
 
-    const encoder = new TextEncoder()
-    let notify: ((version: string) => void) | null = null
-    let heartbeat: ReturnType<typeof setInterval> | null = null
+    return streamSSE(c, async (stream) => {
+      const onSaved = (next: string) => {
+        void stream.writeSSE({ data: next })
+      }
+      subscribe(onSaved)
 
-    const stream = new ReadableStream<Uint8Array>({
-      start(controller) {
-        const send = (payload: string) => {
-          // 切断とほぼ同時のイベントは enqueue が例外になるだけなので握りつぶす。
-          try {
-            controller.enqueue(encoder.encode(payload))
-          } catch {
-            /* closed */
-          }
+      let heartbeat: ReturnType<typeof setInterval> | null = null
+      const cleanup = () => {
+        unsubscribe(onSaved)
+        if (heartbeat !== null) {
+          clearInterval(heartbeat)
+          heartbeat = null
         }
-        const onSaved = (next: string) => send(`data: ${next}\n\n`)
-        notify = onSaved
-        subscribe(onSaved)
-        send('retry: 500\n\n')
-        heartbeat = setInterval(() => send(':\n\n'), HEARTBEAT_MS)
-        // ページの読み込みから接続までの間に保存が挟まっていた場合。
-        if (clientVersion !== undefined && clientVersion !== version) onSaved(version)
-      },
-      cancel() {
-        if (notify !== null) unsubscribe(notify)
-        if (heartbeat !== null) clearInterval(heartbeat)
-      },
-    })
+      }
+      stream.onAbort(cleanup)
+      if (stream.aborted) {
+        cleanup()
+        return
+      }
 
-    return c.body(stream, 200, SSE_HEADERS)
+      // retry は data 無しの行。writeSSE は必ず data: を付けるので素の write。
+      await stream.write('retry: 500\n\n')
+      heartbeat = setInterval(() => {
+        // 心拍は SSE のコメント行。data: にすると EventSource が message を飛ばし、
+        // プレビューがリロードしてしまう。
+        void stream.write(':\n\n')
+      }, HEARTBEAT_MS)
+      // ページの読み込みから接続までの間に保存が挟まっていた場合。
+      if (clientVersion !== undefined && clientVersion !== version) onSaved(version)
+
+      await new Promise<void>((resolve) => {
+        stream.onAbort(() => resolve())
+        if (stream.aborted) resolve()
+      })
+    })
   })
 
   app.get('/*', async (c) => {
@@ -361,10 +353,7 @@ export function createPreviewApp(config: PreviewConfig = { source: './content/in
     const type = imageContentType(rel) ?? imageContentType(file)
     if (type === undefined) return c.body('', 404)
     try {
-      return c.body(await readFile(file), 200, {
-        'Content-Type': type,
-        'Cache-Control': 'no-store',
-      })
+      return c.body(await readFile(file), 200, { 'Content-Type': type })
     } catch {
       return c.body('', 404)
     }
