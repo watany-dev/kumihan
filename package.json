@@ -28,7 +28,7 @@
   "devDependencies": {
     "@types/node": "22.19.21",
     "@vitest/coverage-v8": "4.1.11",
-    "knip": "6.32.2",
+    "knip": "6.32.3",
     "vite-plus": "0.3.0"
   },
   "devEngines": {
