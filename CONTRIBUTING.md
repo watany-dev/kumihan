@@ -140,6 +140,6 @@ bun run bench:memory -- --scale 2000
 
 ## CI とリリース
 
-`main` への push と PR で `vp check`、knip、カバレッジ付きテスト、export、バイナリの smoke test、`actionlint`、`zizmor` が走ります。セキュリティ用ワークフローは Semgrep、Gitleaks、`bun audit` を weekly でも回します。
+`main` への push と PR で `vp check`、knip、カバレッジ付きテスト、export、バイナリの smoke test、`actionlint`、`zizmor`、`zghalint` が走ります。セキュリティ用ワークフローは Semgrep、Gitleaks、`bun audit` を weekly でも回します。
 
 バージョンタグ（`v0.1.0` など）では、同じ検査のあとスタンドアロン実行ファイルを GitHub Release に載せます。脆弱性の報告手順は [SECURITY.md](SECURITY.md) です。

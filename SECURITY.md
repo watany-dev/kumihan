@@ -47,4 +47,4 @@ Every pull request runs:
 - Semgrep (`p/javascript`, `p/typescript`, `p/nodejs`, `p/security-audit`, `p/github-actions`, plus `.semgrep/`)
 - Gitleaks
 - `vp pm audit`（`bun audit`）
-- `actionlint` and `zizmor` (pedantic) on workflows
+- `actionlint`, `zizmor` (pedantic), and `zghalint` on workflows
