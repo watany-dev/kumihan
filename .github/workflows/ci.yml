@@ -108,3 +108,9 @@ jobs:
           min-severity: low
           persona: pedantic
           version: '1.29.0'
+
+      - name: Run zghalint
+        uses: watany-dev/zghalint@71f0cfb98adee2edf33f84fb8bd1014008e25a6c # v0.0.1
+        with:
+          version: v0.0.1
+          paths: '.github/workflows/*.yml'
