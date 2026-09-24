@@ -29,7 +29,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Vite+
-        uses: voidzero-dev/setup-vp@1b32467adbe183473499fd9d5d372c3ed9641754 # v1.18.0
+        uses: voidzero-dev/setup-vp@9fd26ff49f9b5e6276c2b493da4454ad4527f7f4 # v1.20.0
         with:
           node-version-file: .node-version
           cache: true
@@ -101,7 +101,7 @@ jobs:
         run: actionlint -color
 
       - name: Run zizmor
-        uses: zizmorcore/zizmor-action@3dc1ecc9bcb9e94e9b2c709687979e1298497054 # v0.6.2
+        uses: zizmorcore/zizmor-action@cc914d7f3750a2d13d75c7f184a1060aa0e9d482 # v0.6.4
         with:
           advanced-security: false
           annotations: true
@@ -110,7 +110,7 @@ jobs:
           version: '1.29.0'
 
       - name: Run zghalint
-        uses: watany-dev/zghalint@71f0cfb98adee2edf33f84fb8bd1014008e25a6c # v0.0.1
+        uses: watany-dev/zghalint@49748850f6fa16bcb5302539425b0879275c259e # v0.0.2
         with:
           version: v0.0.1
           paths: '.github/workflows/*.yml'
