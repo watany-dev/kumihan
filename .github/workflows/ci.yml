@@ -112,5 +112,5 @@ jobs:
       - name: Run zghalint
         uses: watany-dev/zghalint@49748850f6fa16bcb5302539425b0879275c259e # v0.0.2
         with:
-          version: v0.0.1
+          version: v0.0.2
           paths: '.github/workflows/*.yml'
