@@ -141,6 +141,7 @@ const SIZES: PageLayout[] = [
 ]
 
 describe('typesetting fuzzing', () => {
+  // 2000 シード × 3 判型。CI ランナーでは既定の 5 秒を超えることがある。
   it('keeps every page well formed and loses nothing', () => {
     for (let seed = 1; seed <= 2000; seed += 1) {
       const source = generate(seed * 2654435761)
@@ -166,7 +167,7 @@ describe('typesetting fuzzing', () => {
         }
       }
     }
-  })
+  }, 30_000)
 
   it('renders a well formed document in every mode', () => {
     for (let seed = 1; seed <= 500; seed += 1) {
