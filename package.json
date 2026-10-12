@@ -23,13 +23,16 @@
     "test:coverage": "vp test --coverage"
   },
   "dependencies": {
-    "hono": "4.13.5"
+    "hono": "4.13.12"
   },
   "devDependencies": {
     "@types/node": "26.4.0",
     "@vitest/coverage-v8": "4.1.11",
     "knip": "6.32.3",
     "vite-plus": "0.3.0"
+  },
+  "overrides": {
+    "tinypool": "2.1.2"
   },
   "devEngines": {
     "packageManager": {
