@@ -23,7 +23,7 @@
     "test:coverage": "vp test --coverage"
   },
   "dependencies": {
-    "hono": "4.13.12"
+    "hono": "4.13.13"
   },
   "devDependencies": {
     "@types/node": "26.4.0",
