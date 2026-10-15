@@ -29,7 +29,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Vite+
-        uses: voidzero-dev/setup-vp@9fd26ff49f9b5e6276c2b493da4454ad4527f7f4 # v1.20.0
+        uses: voidzero-dev/setup-vp@3754dd7dbdb32bd8f6d28b6043de13ad3a75f21f # v1.21.1
         with:
           node-version-file: .node-version
           cache: true
@@ -110,7 +110,7 @@ jobs:
           version: '1.29.0'
 
       - name: Run zghalint
-        uses: watany-dev/zghalint@49748850f6fa16bcb5302539425b0879275c259e # v0.0.2
+        uses: watany-dev/zghalint@83188550edee2d9b3f219a76ecd8848c004adcf8 # v0.0.3
         with:
           version: v0.0.2
           paths: '.github/workflows/*.yml'
