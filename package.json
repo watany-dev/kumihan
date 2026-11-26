@@ -27,7 +27,7 @@
   },
   "devDependencies": {
     "@types/node": "26.6.4",
-    "@vitest/coverage-v8": "4.1.11",
+    "@vitest/coverage-v8": "5.1.1",
     "knip": "6.40.0",
     "vite-plus": "0.3.0"
   },
